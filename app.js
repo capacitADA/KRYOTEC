@@ -91,37 +91,6 @@ async function cargarDatos() {
     renderView();
 }
 
-// ===== SEMBRAR DATOS INICIALES =====
-async function sembrarDatos() {
-    const snap = await getDocs(collection(db, 'tecnicos'));
-    if (!snap.empty) return;
-    toast('⚙️ Configurando app...');
-    
-    await addDoc(collection(db, 'clientes'), {
-        nombre: 'KRYOTEC SERVICIOS SAS',
-        telefono: '3133292510',
-        email: 'erwin.duarte@kryotec.com',
-        ciudad: 'Bucaramanga',
-        direccion: 'SAP 108084',
-        latitud: '4.6798976',
-        longitud: '-74.0415781',
-        fechaCreacion: new Date().toISOString().split('T')[0]
-    });
-
-    await addDoc(collection(db, 'tecnicos'), {
-        nombre: 'Erwin Duarte',
-        cedula: '0000001',
-        tipoDoc: 'CC',
-        telefono: '3133292510',
-        cargo: 'Administrador',
-        rol: 'admin',
-        especialidades: ['mecanico', 'baja', 'media', 'electronico', 'ups', 'planta'],
-        region: 'Colombia',
-        clave: '1234'
-    });
-
-    toast('✅ Listo. Cedula: 0000001 · Clave: 1234');
-}
 
 // ===== CSV A FIRESTORE =====
 async function guardarTiendasJMC(tiendas, version) {
@@ -191,12 +160,12 @@ function getTiendaJMC(sap) {
 
 function esClienteJMC(clienteId) {
     const c = getCl(clienteId);
-    return c?.nombre === 'KRYOTEC SERVICIOS SAS';
+    return c?.nombre === 'Jeronimo Martins Colombia';
 }
 
 function esClienteRO(clienteId) {
     const c = getCl(clienteId);
-    return c?.nombre === 'Kryotec Servicios SAS';
+    return c?.nombre === 'Construciones Arquitectonicas RO';
 }
 
 const LOGO_RO_B64 = 'data:image/png;base64,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';
@@ -780,7 +749,7 @@ function modalNuevoServicio(eid) {
             </div>
             <label class="fl">Tecnico</label>
             <input class="fi" id="sTecnico" value="${sesionActual?.nombre||''}" readonly>
-            ${esJMC ? `<div style="background:#f5f3ff;border-radius:10px;padding:0.65rem;margin-top:0.65rem;display:flex;justify-content:space-between;align-items:center;"><span style="color:#5b21b6;">📋 Informe tecnico KRYOTEC</span><button class="btn btn-sm" style="background:#7c3aed;color:white;" onclick="modalInformeJMC('${eid}')">Abrir</button></div>` : ''}
+            ${esJMC ? `<div style="background:#f5f3ff;border-radius:10px;padding:0.65rem;margin-top:0.65rem;display:flex;justify-content:space-between;align-items:center;"><span style="color:#5b21b6;">📋 Informe tecnico Jeronimo Martins</span><button class="btn btn-sm" style="background:#7c3aed;color:white;" onclick="modalInformeJMC('${eid}')">Abrir</button></div>` : ''}
             ${esRO ? `<div style="background:#e8f4fd;border-radius:10px;padding:0.65rem;margin-top:0.65rem;display:flex;justify-content:space-between;align-items:center;"><span style="color:#1565c0;">📋 Informe tecnico KRYOTEC SERVICIOS SAS</span><button class="btn btn-sm" style="background:#1976d2;color:white;" onclick="modalInformeRO('${eid}')">Abrir</button></div>` : ''}
             <label class="fl">Diagnostico / Descripcion *</label>
             <textarea class="fi" id="sDesc" rows="3" placeholder="Trabajo realizado..."></textarea>
@@ -834,7 +803,7 @@ function modalInformeJMC(eid) {
     const tienda = getTiendaJMC(sapActual);
     const dd = hoy.split('-')[2], mm = hoy.split('-')[1], aa = hoy.split('-')[0].slice(2);
 
-    showModal(`<div class="modal modal-wide"><div class="modal-h" style="background:#1e3a6e;"><h3>📋 Informe KRYOTEC — FF-JMC-DT-06</h3><button class="xbtn" onclick="closeModal()">✕</button></div>
+    showModal(`<div class="modal modal-wide"><div class="modal-h" style="background:#1e3a6e;"><h3>📋 Informe Jeronimo Martins — FF-JMC-DT-06</h3><button class="xbtn" onclick="closeModal()">✕</button></div>
         <div class="modal-b">
             <div style="background:#0c214a;color:white;text-align:center;padding:4px;margin-bottom:6px;border-radius:4px;">CONTRATISTA</div>
             <div class="fr"><div><label class="fl">Razon social</label><input class="fi" value="KRYOTEC SERVICIOS SAS" readonly></div><div><label class="fl">NIT</label><input class="fi" value="900.719.852-0" readonly></div></div>
@@ -2013,7 +1982,6 @@ document.querySelectorAll('.bni').forEach(btn => {
 // ===== INICIAR APP =====
 (async () => {
     await conectarDriveAuto();
-    await sembrarDatos();
     await cargarDatos();
     if (!manejarRutaQR()) renderView();
 })();
