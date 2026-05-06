@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#1a3a6e">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>KRYOTEC SERVICIOS SAS</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="app" id="appRoot">
+        <div class="topbar" id="topbarEl">
+            <div class="topbar-logo">
+                <img src="KRYOTEC_Logo.png" style="height:34px;border-radius:4px;" alt="KRYOTEC">
+            </div>
+            <div id="topbarRight" class="topbar-right">
+                <span class="topbar-user" id="topbarUser">Sin sesión</span>
+            </div>
+        </div>
+        <div class="main" id="mainContent">
+            <div class="loading-screen">
+                <div class="loading-spinner"></div>
+                <p>Cargando...</p>
+            </div>
+        </div>
+        <nav class="botnav" id="botnavEl">
+            <button class="bni active" data-page="panel"><span class="bni-ico">📊</span><span class="bni-lbl">Panel</span></button>
+            <button class="bni" data-page="clientes"><span class="bni-ico">👥</span><span class="bni-lbl">Clientes</span></button>
+            <button class="bni" data-page="equipos"><span class="bni-ico">🔧</span><span class="bni-lbl">Activos</span></button>
+            <button class="bni" data-page="servicios"><span class="bni-ico">📋</span><span class="bni-lbl">Servicios</span></button>
+            <button class="bni" data-page="mantenimientos"><span class="bni-ico">📅</span><span class="bni-lbl">Agenda</span></button>
+            <button class="bni" data-page="tecnicos"><span class="bni-ico">👨‍🔧</span><span class="bni-lbl">Técnicos</span></button>
+        </nav>
+    </div>
+    <div class="overlay hidden" id="overlayEl"></div>
+    <div class="toast" id="toastEl"></div>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <script type="module" src="app.js"></script>
+</body>
+</html>
