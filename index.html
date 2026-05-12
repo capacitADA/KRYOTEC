@@ -7,13 +7,15 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>KRYOTEC SERVICIOS SAS</title>
+    <!-- Favicon (evita error 404) -->
+    <link rel="icon" type="image/x-icon" href="https://raw.githubusercontent.com/capacitADA/KRYOTEC/main/favicon.ico">
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
     <div class="app" id="appRoot">
         <div class="topbar" id="topbarEl">
             <div class="topbar-logo">
-                <img src="KRYOTEC_Logo.png" style="height:34px;border-radius:4px;" alt="KRYOTEC">
+                <img src="https://raw.githubusercontent.com/capacitADA/KRYOTEC/main/KRYOTEC_Logo.png" style="height:34px;border-radius:4px;" alt="KRYOTEC">
             </div>
             <div id="topbarRight" class="topbar-right">
                 <span class="topbar-user" id="topbarUser">Sin sesión</span>
@@ -36,10 +38,14 @@
     </div>
     <div class="overlay hidden" id="overlayEl"></div>
     <div class="toast" id="toastEl"></div>
+    
+    <!-- Librerías externas -->
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    
+    <!-- Módulo principal de la aplicación -->
     <script type="module" src="app.js"></script>
 </body>
 </html>

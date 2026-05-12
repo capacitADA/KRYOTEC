@@ -45,8 +45,6 @@
     
     /* Variables legacy de azul (ya no se usan pero se dejan por compatibilidad) */
     --blue:        var(--blue-primary);
-    --blue-dark:   var(--blue-dark);
-    --blue-light:  var(--blue-light);
     --teal:        var(--blue-mid);
     --teal-dark:   #1e4d8c;
 }
@@ -359,6 +357,23 @@ html, body {
 .btn-wa     { background: var(--whatsapp); color: white; }
 .btn-full   { width: 100%; }
 .btn-sm     { padding: 0.4rem 0.85rem; font-size: 0.78rem; min-height: 38px; }
+.btn-d1-nuevo {
+    background: #e4002b;
+    color: white;
+    border: none;
+    border-radius: 12px;
+    padding: 14px;
+    font-size: 0.9rem;
+    font-weight: 800;
+    cursor: pointer;
+    font-family: sans-serif;
+    box-shadow: 0 6px 20px rgba(228, 0, 43, 0.3);
+    width: 100%;
+    margin-top: 10px;
+}
+.btn-d1-nuevo:active {
+    transform: scale(0.97);
+}
 
 .ib {
     background: none; border: 0.5px solid var(--border); border-radius: 8px;
