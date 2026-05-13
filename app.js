@@ -528,154 +528,175 @@ async function exportarActaD1(eid, consecutivo) {
     if (!funcNombre) { toast('⚠️ Ingresa el nombre del funcionario D1'); return; }
     if (!funcId) { toast('⚠️ Ingresa la identificación del funcionario'); return; }
     const fotosBase64 = [];
-    for (let i = 0; i < fotosD1.length; i++) { if (fotosD1[i]) { fotosBase64.push(await comprimirImagenD1(fotosD1[i])); } else { fotosBase64.push(''); } }
-    // Guardar en Firestore
-    try { await addDoc(collection(db, 'servicios'), { equipoId: eid, tipo: 'Mantenimiento', fecha: new Date().toISOString().split('T')[0], tecnico: sesionActual?.nombre || '', descripcion: `[D1] ${falla.substring(0, 100)}`, proximoMantenimiento: null, fotos: fotosBase64.filter(f => f), consecutivoD1: consecutivo, idServicioD1: idServicio, tipoMantenimiento: tipoMant, especialidades: especialidadesSel, equipos: equiposSel, falla, trabajoRealizado: trabajo, condicionEntrega: entrega, estadoEntrega: estado, observaciones, funcionarioNombre: funcNombre, funcionarioId: funcId, idTienda: e?.idTienda || '' }); toast('✅ Servicio D1 guardado'); await cargarDatos(); } catch (err) { toast('⚠️ Error guardando: ' + err.message); }
-    // Capturar firma canvas D1
+    for (let i = 0; i < fotosD1.length; i++) {
+        if (fotosD1[i]) { fotosBase64.push(await comprimirImagenD1(fotosD1[i])); } else { fotosBase64.push(''); }
+    }
+    try {
+        await addDoc(collection(db, 'servicios'), { equipoId: eid, tipo: 'Mantenimiento', fecha: new Date().toISOString().split('T')[0], tecnico: sesionActual?.nombre || '', descripcion: `[D1] ${falla.substring(0,100)}`, proximoMantenimiento: null, fotos: fotosBase64.filter(f=>f), consecutivoD1: consecutivo, idServicioD1: idServicio, tipoMantenimiento: tipoMant, especialidades: especialidadesSel, equipos: equiposSel, falla, trabajoRealizado: trabajo, condicionEntrega: entrega, estadoEntrega: estado, observaciones, funcionarioNombre: funcNombre, funcionarioId: funcId, idTienda: e?.idTienda || '' });
+        toast('✅ Servicio D1 guardado'); await cargarDatos();
+    } catch (err) { toast('⚠️ Error guardando: ' + err.message); }
     const firmaCanvas = document.getElementById('d1FirmaCanvas');
     if (firmaCanvas) d1FirmaDataUrl = firmaCanvas.toDataURL('image/png');
-    // Generar sello
-    let selloUrl = ''; try { selloUrl = await generarSelloD1(tienda?.tienda || e?.ubicacion || 'D1'); } catch (err) { console.warn('Sello error:', err); }
-    // Fecha
+    let selloUrl = '';
+    try { selloUrl = await generarSelloD1(tienda?.tienda || e?.ubicacion || 'D1'); } catch(err) { console.warn(err); }
     const hoy = new Date();
-    const dd = String(hoy.getDate()).padStart(2, '0');
-    const MESES_LISTA = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
-    const mes = MESES_LISTA[hoy.getMonth()];
+    const dd = String(hoy.getDate()).padStart(2,'0');
+    const MESES_N = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+    const mes = MESES_N[hoy.getMonth()];
     const aa = String(hoy.getFullYear());
-    const nombreArch = `Acta_D1_${consecutivo}_${dd}-${mes}-${aa}`;
-    // Generar firma técnico Meddon
+    // Firma técnico con fuente Meddon (igual que Acta_D1_Kryotec_v3.html)
     let firmaTecBase64 = '';
     try {
         firmaTecBase64 = await new Promise(resolve => {
-            const font = new FontFace('Meddon', 'url(https://raw.githubusercontent.com/capacitADA/KRYOTEC/main/Meddon-Regular.ttf)');
+            const font = new FontFace('Meddon','url(https://raw.githubusercontent.com/capacitADA/KRYOTEC/main/Meddon-Regular.ttf)');
             font.load().then(loaded => {
                 document.fonts.add(loaded);
-                const c = document.createElement('canvas'); c.width = 280; c.height = 54;
+                const c = document.createElement('canvas'); c.width=280; c.height=54;
                 const ctx = c.getContext('2d');
                 ctx.font = '28px Meddon'; ctx.fillStyle = '#111';
-                ctx.fillText(sesionActual?.nombre || '', 6, 40);
+                ctx.fillText(sesionActual?.nombre||'', 6, 40);
                 resolve(c.toDataURL('image/png'));
             }).catch(() => {
-                const c = document.createElement('canvas'); c.width = 280; c.height = 54;
+                const c = document.createElement('canvas'); c.width=280; c.height=54;
                 const ctx = c.getContext('2d');
                 ctx.font = 'italic 22px Georgia'; ctx.fillStyle = '#111';
-                ctx.fillText(sesionActual?.nombre || '', 6, 38);
+                ctx.fillText(sesionActual?.nombre||'', 6, 38);
                 resolve(c.toDataURL('image/png'));
             });
         });
-    } catch(err) { console.warn('Firma tecnico error:', err); }
-    const actaHtml = generarHtmlActaD1PDF({ consecutivo, idServicio, tienda, e, tipoMant, especialidadesSel, equiposSel, falla, trabajo, entrega, estado, observaciones, funcNombre, funcId, selloUrl, dd, mes, aa, fotosBase64, firmaTecBase64 });
-    // Subir a Drive en background
-    driveUploadPDF(actaHtml, nombreArch + '.pdf').catch(err => console.warn('Drive upload error:', err));
+    } catch(err) { console.warn(err); }
+    const html = generarHtmlActaD1PDF({ consecutivo, idServicio, tienda, e, tipoMant, especialidadesSel, equiposSel, falla, trabajo, entrega, estado, observaciones, funcNombre, funcId, selloUrl, dd, mes, aa, fotosBase64, firmaTecBase64 });
+    const nombreArch = `Acta_D1_${consecutivo}_${new Date().toISOString().slice(0,19).replace(/:/g,'-')}`;
+    driveUploadPDF(html, nombreArch + '.pdf').catch(err => console.warn('Drive:', err));
     toast('⏳ Generando PDF...');
-    // Generar PDF con html2canvas + jsPDF
     try {
-        await _cargarLibPDF();
+        await Promise.all([
+            window.html2canvas ? Promise.resolve() : new Promise((res,rej)=>{ const s=document.createElement('script'); s.src='https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js'; s.onload=res; s.onerror=rej; document.head.appendChild(s); }),
+            window.jspdf       ? Promise.resolve() : new Promise((res,rej)=>{ const s=document.createElement('script'); s.src='https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'; s.onload=res; s.onerror=rej; document.head.appendChild(s); })
+        ]);
+        await new Promise(r=>setTimeout(r,300));
         const wrap = document.createElement('div');
-        wrap.style.cssText = 'position:fixed;left:-9999px;top:0;width:794px;background:white;z-index:-1;font-family:Arial,sans-serif;';
-        // Extraer solo el body del HTML generado
-        const bodyMatch = actaHtml.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
-        wrap.innerHTML = bodyMatch ? bodyMatch[1] : actaHtml;
+        wrap.style.cssText = 'position:fixed;left:-9999px;top:0;width:794px;background:white;z-index:-1;';
+        const bodyM = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+        wrap.innerHTML = bodyM ? bodyM[1] : html;
         document.body.appendChild(wrap);
         await document.fonts.ready;
-        await new Promise(r => setTimeout(r, 900));
-        const canvas = await window.html2canvas(wrap, { scale: 2.5, backgroundColor: '#ffffff', useCORS: true, allowTaint: true, logging: false, windowWidth: 794 });
+        await new Promise(r=>setTimeout(r,900));
+        const canvas = await window.html2canvas(wrap, { scale:2.5, backgroundColor:'#ffffff', useCORS:true, allowTaint:true, logging:false, windowWidth:794 });
         document.body.removeChild(wrap);
-        const imgData = canvas.toDataURL('image/png');
         const { jsPDF } = window.jspdf;
-        const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
-        const imgW = 210; const imgH = (canvas.height * imgW) / canvas.width;
-        pdf.addImage(imgData, 'PNG', 0, 0, imgW, imgH);
-        pdf.save(nombreArch + '.pdf');
+        const pdf = new jsPDF({ unit:'mm', format:'a4', orientation:'portrait' });
+        const imgW=210, imgH=(canvas.height*imgW)/canvas.width;
+        pdf.addImage(canvas.toDataURL('image/png'),'PNG',0,0,imgW,imgH);
+        pdf.save(nombreArch+'.pdf');
         toast('✅ PDF descargado');
     } catch(pdfErr) {
-        console.error('PDF error:', pdfErr);
-        // Fallback: descargar HTML
-        const blob = new Blob([actaHtml], { type: 'text/html;charset=utf-8' });
+        console.error(pdfErr);
+        const blob = new Blob([html],{type:'text/html;charset=utf-8'});
         const url = URL.createObjectURL(blob);
-        const a = document.createElement('a'); a.href = url; a.download = nombreArch + '.html'; a.click();
+        const a = document.createElement('a'); a.href=url; a.download=nombreArch+'.html'; a.click();
         URL.revokeObjectURL(url);
-        toast('⚠️ PDF no disponible, descargado como HTML');
+        toast('⚠️ Descargado como HTML (PDF falló)');
     }
     closeModal();
 }
 
-async function _cargarLibPDF() {
-    const loads = [];
-    if (!window.html2canvas) {
-        loads.push(new Promise((res, rej) => {
-            const s = document.createElement('script');
-            s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
-            s.onload = res; s.onerror = rej; document.head.appendChild(s);
-        }));
-    }
-    if (!window.jspdf) {
-        loads.push(new Promise((res, rej) => {
-            const s = document.createElement('script');
-            s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
-            s.onload = res; s.onerror = rej; document.head.appendChild(s);
-        }));
-    }
-    if (loads.length) await Promise.all(loads);
-    await new Promise(r => setTimeout(r, 200));
-}
 
 // ============================================
 // GENERAR HTML DEL PDF DEL ACTA D1 - SECCIONES 1 A 8
 // ============================================
 function generarHtmlActaD1PDF(data) {
-    const { consecutivo, idServicio, tienda, e, tipoMant, especialidadesSel, equiposSel, falla, trabajo, entrega, estado, observaciones, funcNombre, funcId, selloUrl, dd, mes, aa, fotosBase64, firmaTecBase64 } = data;
-    const logoD1Url = 'https://raw.githubusercontent.com/capacitADA/KRYOTEC/main/Logo_D1.png';
-    const chk = (val, lista) => lista.includes(val)
-        ? '<span style="font-size:12pt;">&#9632;</span>'
-        : '<span style="font-size:10pt;">&#9744;</span>';
-    const fmtCed = n => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    const { consecutivo, idServicio, tienda, e, tipoMant, especialidadesSel, equiposSel,
+            falla, trabajo, entrega, estado, observaciones, funcNombre, funcId,
+            selloUrl, dd, mes, aa, fotosBase64, firmaTecBase64 } = data;
+    const tecNombre  = sesionActual?.nombre || '';
+    const tecCedula  = sesionActual?.cedula  || '';
+    const nombreTienda = tienda?.tienda || e?.ubicacion || '';
 
-    // Descripcion: falla(5 lineas) + trabajo(5 lineas) + entrega(2 lineas) + estado(1 linea)
-    const fLines = falla.split('\n');
-    const tLines = trabajo.split('\n');
-    const enLines = entrega.split('\n');
-    const oLines = observaciones.split('\n');
-    const descRows = (lines, count, isLast) => Array.from({length: count}, (_, i) => {
-        const last = i === count - 1;
-        const bBottom = last ? '2px solid #000' : '1px solid #aaa';
-        return `<tr><td style="border-left:2px solid #000;border-right:2px solid #000;border-top:none;border-bottom:${bBottom};height:11px;padding:0 4px 1px 4px;font-size:8.5pt;vertical-align:bottom;white-space:normal;overflow:hidden;">${lines[i] || ''}&nbsp;</td></tr>`;
+    function fmtCed(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g,'.'); }
+    function chk(val, lista) {
+        return lista.includes(val)
+            ? '<span style="font-size:12pt;">&#9632;</span>'
+            : '<span style="font-size:10pt;">&#9744;</span>';
+    }
+
+    // Descripción: misma lógica que el HTML v3 — líneas fijas
+    const fallaL   = falla.split('\n');
+    const trabajoL = trabajo.split('\n');
+    const entregaL = entrega.split('\n');
+    const obsL     = observaciones.split('\n');
+
+    const descLines = [
+        fallaL[0]||'', fallaL[1]||'', fallaL[2]||'', fallaL[3]||'', fallaL[4]||'',
+        trabajoL[0]||'', trabajoL[1]||'', trabajoL[2]||'', trabajoL[3]||'', trabajoL[4]||'',
+        entregaL[0]||'', entregaL[1]||'',
+        `Estado final del equipo: ${estado}`, ''
+    ];
+    const lineRows = descLines.map((t,i) => {
+        const isLast = i === descLines.length-1;
+        return `<tr class="${isLast?'rl-last':'rl'}"><td>${t}&nbsp;</td></tr>`;
     }).join('');
+    const obsRows = ['','','','',''].map((t,i,a) =>
+        `<tr class="${i===a.length-1?'rl-last':'rl'}"><td>${obsL[i]||''}&nbsp;</td></tr>`
+    ).join('');
 
-    return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+    return `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
 <title>Acta_D1_${consecutivo}</title>
 <style>
 @font-face { font-family:'Meddon'; src:url('https://raw.githubusercontent.com/capacitADA/KRYOTEC/main/Meddon-Regular.ttf') format('truetype'); }
-body { font-family:Arial,sans-serif; margin:0; padding:10px 12px; font-size:7.5pt; line-height:1.2; background:#fff; width:770px; box-sizing:border-box; }
-table { width:100%; border-collapse:collapse; }
-td,th { border:1px solid #000; padding:2px 5px; vertical-align:bottom; font-size:7.5pt; white-space:nowrap; }
-.hd { font-weight:700; text-align:center; font-size:10pt; padding:3px; }
+body { font-family:Arial,sans-serif; background:#fff; padding:14px 16px; font-size:7.5pt; line-height:1.2; box-sizing:border-box; width:794px; }
+.bloque { border:2px solid #000; border-collapse:collapse; width:100%; margin-top:-2px; }
+.bloque td,.bloque th { border:1px solid #000; padding:2px 5px; vertical-align:bottom; font-size:7.5pt; white-space:nowrap; }
+.hd { font-weight:700; text-align:center; font-size:9pt; padding:3px; }
 .lbl { white-space:nowrap; font-weight:700; width:1px; }
-.nota { color:#e4002b; font-size:5.5pt; text-align:center; margin-top:5px; font-style:italic; }
-</style></head><body>
+.rl td { border-left:2px solid #000; border-right:2px solid #000; border-top:none; border-bottom:1px solid #aaa; height:9px; padding:0 4px 0 4px; font-size:8.5pt; vertical-align:bottom; white-space:normal; overflow:hidden; }
+.rl-last td { border-left:2px solid #000; border-right:2px solid #000; border-top:none; border-bottom:2px solid #000; height:9px; padding:0 4px 0 4px; font-size:8.5pt; vertical-align:bottom; white-space:normal; overflow:hidden; }
+.nota { color:#e4002b; font-size:5.5pt; text-align:center; margin-top:4px; font-style:italic; }
+</style>
+</head>
+<body>
 
 <!-- CABECERA -->
-<table style="border:none;margin-bottom:4px;">
+<table class="bloque" style="border:none;margin-bottom:3px;">
   <tr>
-    <td style="border:none;padding:0 8px 0 0;vertical-align:middle;width:55px;"><img src="${logoD1Url}" style="height:38px;"></td>
-    <td style="border:none;text-align:center;vertical-align:middle;"><strong style="font-size:9.5pt;">ACTA DE ENTREGA SERVICIOS DE MANTENIMIENTO REGIONAL SANTANDER</strong></td>
-    <td style="border:none;text-align:right;vertical-align:middle;white-space:nowrap;">FECHA &nbsp;<span style="border:1px solid #000;padding:1px 5px;margin-right:-1px;">${dd}</span><span style="border:1px solid #000;padding:1px 5px;margin-right:-1px;">${mes}</span><span style="border:1px solid #000;padding:1px 5px;">${aa}</span></td>
+    <td style="border:none;padding:0 6px 0 0;vertical-align:middle;width:55px;">
+      <img src="https://raw.githubusercontent.com/capacitADA/KRYOTEC/main/Logo_D1.png" style="height:38px;">
+    </td>
+    <td style="border:none;text-align:center;vertical-align:middle;">
+      <strong style="font-size:9.5pt;">ACTA DE ENTREGA SERVICIOS DE MANTENIMIENTO REGIONAL SANTANDER</strong>
+    </td>
+    <td style="border:none;text-align:right;vertical-align:middle;white-space:nowrap;">
+      FECHA &nbsp;
+      <span style="border:1px solid #000;padding:1px 5px;margin-right:-1px;">${dd}</span><span style="border:1px solid #000;padding:1px 5px;margin-right:-1px;">${mes}</span><span style="border:1px solid #000;padding:1px 5px;">${aa}</span>
+    </td>
   </tr>
 </table>
 
 <!-- DATOS DEL PROVEEDOR -->
-<table style="border:2px solid #000;border-collapse:collapse;">
-  <tr><td colspan="4" class="hd">DATOS DEL PROVEEDOR</td></tr>
-  <tr><td class="lbl">NOMBRE:</td><td style="font-weight:700;">KRYOTEC SERVICIOS SAS</td><td class="lbl">NIT:</td><td>900719852-0</td></tr>
-  <tr><td class="lbl">CONSECUTIVO:</td><td style="font-weight:700;color:#e4002b;">${consecutivo}</td><td class="lbl"># COTIZACION:</td><td></td></tr>
-  <tr><td class="lbl">TIENDA (CEDI):</td><td>${tienda?.tienda || e?.ubicacion || ''}</td><td class="lbl">ID DEL SERVICIO:</td><td>${idServicio}</td></tr>
+<table class="bloque">
+  <tr><td colspan="4" class="hd" style="font-size:10pt;">DATOS DEL PROVEEDOR</td></tr>
+  <tr>
+    <td class="lbl">NOMBRE:</td><td style="font-weight:700;">KRYOTEC SERVICIOS SAS</td>
+    <td class="lbl">NIT:</td><td>900719852-0</td>
+  </tr>
+  <tr>
+    <td class="lbl">CONSECUTIVO:</td><td style="font-weight:700;color:#e4002b;">${consecutivo}</td>
+    <td class="lbl"># COTIZACION:</td><td></td>
+  </tr>
+  <tr>
+    <td class="lbl">TIENDA (CEDI):</td><td>${nombreTienda}</td>
+    <td class="lbl">ID DEL SERVICIO:</td><td>${idServicio}</td>
+  </tr>
 </table>
 
 <!-- TIPO DE SERVICIO -->
-<table style="border:2px solid #000;border-collapse:collapse;margin-top:-2px;">
-  <tr><td class="hd">TIPO DE SERVICIO SOLICITADO</td></tr>
+<table class="bloque" style="margin-top:-2px;">
+  <tr><td class="hd" style="font-size:10pt;">TIPO DE SERVICIO SOLICITADO</td></tr>
 </table>
-<table style="border:2px solid #000;border-collapse:collapse;margin-top:-2px;">
+<table class="bloque" style="margin-top:-2px;">
   <tr>
     <td class="lbl">TIPO DE MANTENIMIENTO: <em>MARQUE X</em></td>
     <td>Preventivo ${chk('Preventivo',[tipoMant])}</td>
@@ -683,7 +704,7 @@ td,th { border:1px solid #000; padding:2px 5px; vertical-align:bottom; font-size
     <td>Emergencia ${chk('Emergencia',[tipoMant])}</td>
   </tr>
 </table>
-<table style="border:2px solid #000;border-collapse:collapse;margin-top:-2px;">
+<table class="bloque" style="margin-top:-2px;">
   <tr>
     <td class="lbl">ESPECIALIDAD: <em>MARQUE X</em></td>
     <td>Civil ${chk('Civil',especialidadesSel)}</td>
@@ -695,7 +716,7 @@ td,th { border:1px solid #000; padding:2px 5px; vertical-align:bottom; font-size
     <td>Otro ${chk('Otro',especialidadesSel)}</td>
   </tr>
 </table>
-<table style="border:2px solid #000;border-collapse:collapse;margin-top:-2px;">
+<table class="bloque" style="margin-top:-2px;">
   <tr>
     <td class="lbl">INFORMACION DEL EQUIPO: <em>MARQUE X</em></td>
     <td>Nevera ${chk('Nevera',equiposSel)}</td>
@@ -707,59 +728,60 @@ td,th { border:1px solid #000; padding:2px 5px; vertical-align:bottom; font-size
 </table>
 
 <!-- DESCRIPCION -->
-<table style="border:2px solid #000;border-collapse:collapse;margin-top:-2px;">
-  <tr><td class="hd">DESCRIPCION DEL SERVICIO EJECUTADO</td></tr>
+<table class="bloque" style="margin-top:-2px;">
+  <tr><td class="hd" style="font-size:10pt;">DESCRIPCION DEL SERVICIO EJECUTADO</td></tr>
 </table>
-<table style="width:100%;border-collapse:collapse;">${descRows(fLines,5,false)}${descRows(tLines,5,false)}${descRows(enLines,2,false)}<tr><td style="border:2px solid #000;padding:2px 5px;font-size:8.5pt;">Estado final del equipo: ${estado}</td></tr></table>
+<table style="width:100%;border-collapse:collapse;">${lineRows}</table>
 
 <!-- EVIDENCIAS -->
-<table style="border:2px solid #000;border-collapse:collapse;margin-top:-2px;">
-  <tr><td colspan="2" class="hd">EVIDENCIAS (FOTOGRAFIAS)</td></tr>
+<table class="bloque" style="margin-top:-2px;">
+  <tr><td colspan="2" class="hd" style="font-size:10pt;">EVIDENCIAS (FOTOGRAFIAS)</td></tr>
   <tr>
     <td style="width:50%;text-align:center;font-weight:700;padding:2px;">ANTES</td>
     <td style="width:50%;text-align:center;font-weight:700;padding:2px;">DESPUES</td>
   </tr>
   <tr>
-    <td style="height:160px;text-align:center;vertical-align:middle;">${fotosBase64[0] ? `<img src="${fotosBase64[0]}" style="max-width:100%;max-height:155px;">` : ''}</td>
-    <td style="height:160px;text-align:center;vertical-align:middle;">${fotosBase64[1] ? `<img src="${fotosBase64[1]}" style="max-width:100%;max-height:155px;">` : ''}</td>
+    <td style="height:200px;text-align:center;vertical-align:middle;">${fotosBase64[0]?`<img src="${fotosBase64[0]}" style="max-width:100%;max-height:195px;">`:'&nbsp;'}</td>
+    <td style="height:200px;text-align:center;vertical-align:middle;">${fotosBase64[1]?`<img src="${fotosBase64[1]}" style="max-width:100%;max-height:195px;">`:'&nbsp;'}</td>
   </tr>
 </table>
 
 <!-- OBSERVACIONES -->
-<table style="border:2px solid #000;border-collapse:collapse;margin-top:-2px;">
-  <tr><td class="hd">OBSERVACIONES O RECOMENDACIONES</td></tr>
+<table class="bloque" style="margin-top:-2px;">
+  <tr><td class="hd" style="font-size:10pt;">OBSERVACIONES O RECOMENDACIONES</td></tr>
 </table>
-<table style="width:100%;border-collapse:collapse;">${descRows(oLines,5,true)}</table>
+<table style="width:100%;border-collapse:collapse;">${obsRows}</table>
 
 <!-- ENTREGA A SATISFACCION -->
-<table style="border:2px solid #000;border-collapse:collapse;margin-top:-2px;">
-  <tr><td colspan="4" class="hd">ENTREGA A SATISFACCION D1 SAS</td></tr>
+<table class="bloque" style="margin-top:-2px;">
+  <tr><td colspan="4" class="hd" style="font-size:10pt;">ENTREGA A SATISFACCION D1 SAS</td></tr>
   <tr>
-    <td colspan="2" style="width:50%;text-align:center;padding:6px;vertical-align:middle;">SELLO</td>
-    <td colspan="2" style="width:50%;text-align:center;vertical-align:middle;">${selloUrl ? `<img src="${selloUrl}" style="max-height:62px;">` : ''}</td>
+    <td colspan="2" style="width:50%;text-align:center;height:65px;vertical-align:middle;">SELLO</td>
+    <td colspan="2" style="width:50%;text-align:center;vertical-align:middle;">
+      ${selloUrl?`<img src="${selloUrl}" style="max-height:62px;">`:'&nbsp;'}
+    </td>
   </tr>
   <tr>
     <td class="lbl">FIRMA (PROVEEDOR)</td>
-    <td style="vertical-align:middle;">${firmaTecBase64 ? `<img src="${firmaTecBase64}" style="height:30px;">` : ''}</td>
+    <td>${firmaTecBase64?`<img src="${firmaTecBase64}" style="height:30px;">`:'&nbsp;'}</td>
     <td class="lbl">FIRMA (D1 SAS)</td>
-    <td style="vertical-align:middle;">${d1FirmaDataUrl ? `<img src="${d1FirmaDataUrl}" style="max-height:30px;max-width:120px;">` : ''}</td>
+    <td>${d1FirmaDataUrl?`<img src="${d1FirmaDataUrl}" style="max-height:28px;max-width:130px;">`:'&nbsp;'}</td>
   </tr>
   <tr>
-    <td class="lbl">NOMBRE COMPLETO</td>
-    <td>${sesionActual?.nombre || ''}</td>
-    <td class="lbl">NOMBRE COMPLETO</td>
-    <td>${funcNombre}</td>
+    <td class="lbl">NOMBRE COMPLETO</td><td>${tecNombre}</td>
+    <td class="lbl">NOMBRE COMPLETO</td><td>${funcNombre}</td>
   </tr>
   <tr>
-    <td class="lbl">IDENTIFICACION</td>
-    <td>${fmtCed(sesionActual?.cedula || '')}</td>
-    <td class="lbl">IDENTIFICACION</td>
-    <td>${fmtCed(funcId)}</td>
+    <td class="lbl">IDENTIFICACION</td><td>${fmtCed(tecCedula)}</td>
+    <td class="lbl">IDENTIFICACION</td><td>${fmtCed(funcId)}</td>
   </tr>
 </table>
 <div class="nota">Nota: Se debe diligenciar los campos de firma clara y legible, sin tachones y enmendados; este documento debe entregarse diligenciado en su totalidad de lo contrario no ser&aacute; v&aacute;lido</div>
-</body></html>`;
+
+</body>
+</html>`;
 }
+
 
 // ============================================
 // MODAL QR Y MANEJO DE RUTA QR (SIMPLIFICADOS)
