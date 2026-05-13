@@ -529,56 +529,236 @@ async function exportarActaD1(eid, consecutivo) {
     if (!funcId) { toast('⚠️ Ingresa la identificación del funcionario'); return; }
     const fotosBase64 = [];
     for (let i = 0; i < fotosD1.length; i++) { if (fotosD1[i]) { fotosBase64.push(await comprimirImagenD1(fotosD1[i])); } else { fotosBase64.push(''); } }
+    // Guardar en Firestore
     try { await addDoc(collection(db, 'servicios'), { equipoId: eid, tipo: 'Mantenimiento', fecha: new Date().toISOString().split('T')[0], tecnico: sesionActual?.nombre || '', descripcion: `[D1] ${falla.substring(0, 100)}`, proximoMantenimiento: null, fotos: fotosBase64.filter(f => f), consecutivoD1: consecutivo, idServicioD1: idServicio, tipoMantenimiento: tipoMant, especialidades: especialidadesSel, equipos: equiposSel, falla, trabajoRealizado: trabajo, condicionEntrega: entrega, estadoEntrega: estado, observaciones, funcionarioNombre: funcNombre, funcionarioId: funcId, idTienda: e?.idTienda || '' }); toast('✅ Servicio D1 guardado'); await cargarDatos(); } catch (err) { toast('⚠️ Error guardando: ' + err.message); }
+    // Capturar firma canvas D1
     const firmaCanvas = document.getElementById('d1FirmaCanvas');
     if (firmaCanvas) d1FirmaDataUrl = firmaCanvas.toDataURL('image/png');
-    let selloUrl = ''; try { selloUrl = await generarSelloD1(tienda?.tienda || e?.ubicacion || 'D1'); } catch (err) { console.warn('Error generando sello:', err); }
-    const hoy = new Date(); const dd = String(hoy.getDate()).padStart(2, '0'); const meses = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE']; const mes = meses[hoy.getMonth()]; const aa = String(hoy.getFullYear()).slice(-2);
-    const html = generarHtmlActaD1PDF({ consecutivo, idServicio, tienda, e, tipoMant, especialidadesSel, equiposSel, falla, trabajo, entrega, estado, observaciones, funcNombre, funcId, selloUrl, dd, mes, aa, fotosBase64 });
-    const nombreArch = `D1_${consecutivo}_${e?.idTienda || ''}_${dd}-${mes}-${aa}`;
-    await driveUploadPDF(html, nombreArch + '.pdf');
-    const blob = new Blob([html], { type: 'text/html' }); const url = URL.createObjectURL(blob); const ventana = window.open(url, '_blank'); if (ventana) { ventana.onload = () => { ventana.print(); setTimeout(() => { ventana.close(); }, 1000); }; }
+    // Generar sello
+    let selloUrl = ''; try { selloUrl = await generarSelloD1(tienda?.tienda || e?.ubicacion || 'D1'); } catch (err) { console.warn('Sello error:', err); }
+    // Fecha
+    const hoy = new Date();
+    const dd = String(hoy.getDate()).padStart(2, '0');
+    const MESES_LISTA = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
+    const mes = MESES_LISTA[hoy.getMonth()];
+    const aa = String(hoy.getFullYear());
+    const nombreArch = `Acta_D1_${consecutivo}_${dd}-${mes}-${aa}`;
+    // Generar firma técnico Meddon
+    let firmaTecBase64 = '';
+    try {
+        firmaTecBase64 = await new Promise(resolve => {
+            const font = new FontFace('Meddon', 'url(https://raw.githubusercontent.com/capacitADA/KRYOTEC/main/Meddon-Regular.ttf)');
+            font.load().then(loaded => {
+                document.fonts.add(loaded);
+                const c = document.createElement('canvas'); c.width = 280; c.height = 54;
+                const ctx = c.getContext('2d');
+                ctx.font = '28px Meddon'; ctx.fillStyle = '#111';
+                ctx.fillText(sesionActual?.nombre || '', 6, 40);
+                resolve(c.toDataURL('image/png'));
+            }).catch(() => {
+                const c = document.createElement('canvas'); c.width = 280; c.height = 54;
+                const ctx = c.getContext('2d');
+                ctx.font = 'italic 22px Georgia'; ctx.fillStyle = '#111';
+                ctx.fillText(sesionActual?.nombre || '', 6, 38);
+                resolve(c.toDataURL('image/png'));
+            });
+        });
+    } catch(err) { console.warn('Firma tecnico error:', err); }
+    const actaHtml = generarHtmlActaD1PDF({ consecutivo, idServicio, tienda, e, tipoMant, especialidadesSel, equiposSel, falla, trabajo, entrega, estado, observaciones, funcNombre, funcId, selloUrl, dd, mes, aa, fotosBase64, firmaTecBase64 });
+    // Subir a Drive en background
+    driveUploadPDF(actaHtml, nombreArch + '.pdf').catch(err => console.warn('Drive upload error:', err));
+    toast('⏳ Generando PDF...');
+    // Generar PDF con html2canvas + jsPDF
+    try {
+        await _cargarLibPDF();
+        const wrap = document.createElement('div');
+        wrap.style.cssText = 'position:fixed;left:-9999px;top:0;width:794px;background:white;z-index:-1;font-family:Arial,sans-serif;';
+        // Extraer solo el body del HTML generado
+        const bodyMatch = actaHtml.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+        wrap.innerHTML = bodyMatch ? bodyMatch[1] : actaHtml;
+        document.body.appendChild(wrap);
+        await document.fonts.ready;
+        await new Promise(r => setTimeout(r, 900));
+        const canvas = await window.html2canvas(wrap, { scale: 2.5, backgroundColor: '#ffffff', useCORS: true, allowTaint: true, logging: false, windowWidth: 794 });
+        document.body.removeChild(wrap);
+        const imgData = canvas.toDataURL('image/png');
+        const { jsPDF } = window.jspdf;
+        const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+        const imgW = 210; const imgH = (canvas.height * imgW) / canvas.width;
+        pdf.addImage(imgData, 'PNG', 0, 0, imgW, imgH);
+        pdf.save(nombreArch + '.pdf');
+        toast('✅ PDF descargado');
+    } catch(pdfErr) {
+        console.error('PDF error:', pdfErr);
+        // Fallback: descargar HTML
+        const blob = new Blob([actaHtml], { type: 'text/html;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url; a.download = nombreArch + '.html'; a.click();
+        URL.revokeObjectURL(url);
+        toast('⚠️ PDF no disponible, descargado como HTML');
+    }
     closeModal();
+}
+
+async function _cargarLibPDF() {
+    const loads = [];
+    if (!window.html2canvas) {
+        loads.push(new Promise((res, rej) => {
+            const s = document.createElement('script');
+            s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+            s.onload = res; s.onerror = rej; document.head.appendChild(s);
+        }));
+    }
+    if (!window.jspdf) {
+        loads.push(new Promise((res, rej) => {
+            const s = document.createElement('script');
+            s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+            s.onload = res; s.onerror = rej; document.head.appendChild(s);
+        }));
+    }
+    if (loads.length) await Promise.all(loads);
+    await new Promise(r => setTimeout(r, 200));
 }
 
 // ============================================
 // GENERAR HTML DEL PDF DEL ACTA D1 - SECCIONES 1 A 8
 // ============================================
 function generarHtmlActaD1PDF(data) {
-    const { consecutivo, idServicio, tienda, e, tipoMant, especialidadesSel, equiposSel, falla, trabajo, entrega, estado, observaciones, funcNombre, funcId, selloUrl, dd, mes, aa, fotosBase64 } = data;
+    const { consecutivo, idServicio, tienda, e, tipoMant, especialidadesSel, equiposSel, falla, trabajo, entrega, estado, observaciones, funcNombre, funcId, selloUrl, dd, mes, aa, fotosBase64, firmaTecBase64 } = data;
     const logoD1Url = 'https://raw.githubusercontent.com/capacitADA/KRYOTEC/main/Logo_D1.png';
-    const check = (valor, lista) => lista.includes(valor) ? '☒' : '☐';
-    const fallaLines = falla.split('\n'); const trabajoLines = trabajo.split('\n'); const entregaLines = entrega.split('\n'); const obsLines = observaciones.split('\n');
-    return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Acta_D1_${consecutivo}</title><style>@page { size: A4; margin: 5mm; } body { font-family: Arial, sans-serif; margin: 0; padding: 0; font-size: 7pt; line-height: 1.2; } table { width: 100%; border-collapse: collapse; } td, th { border: 1px solid #000; padding: 2px 4px; vertical-align: top; } .sin-borde { border: none; } .borde-grueso { border: 1.5px solid #000; } .linea-gris { border-bottom: 0.5px solid #ccc; } .nota { color: #e4002b; font-size: 6pt; text-align: center; margin-top: 4px; } .firma-meddon { font-family: 'Meddon', cursive; font-size: 12px; } @font-face { font-family: 'Meddon'; src: url('https://raw.githubusercontent.com/capacitADA/KRYOTEC/main/Meddon-Regular.ttf') format('truetype'); } .foto-cell { text-align: center; vertical-align: middle; } .foto-img { max-width: 100%; max-height: 100px; } </style></head><body>
-<!-- SECCION 1: ENCABEZADO -->
-<table class="sin-borde" style="margin-bottom: 4px;"><tr><td style="width: 80px; border: none;"><img src="${logoD1Url}" style="height: 40px;"></td><td style="text-align: center; font-weight: bold; font-size: 9pt; border: none;">ACTA DE ENTREGA SERVICIOS DE MANTENIMIENTO REGIONAL SANTANDER</td><td style="text-align: right; border: none;">FECHA <span style="border:1px solid #000; padding:2px 4px;">${dd}</span> <span style="border:1px solid #000; padding:2px 4px;">${mes}</span> <span style="border:1px solid #000; padding:2px 4px;">${aa}</span></td></tr></table>
-<!-- SECCION 2: DATOS DEL PROVEEDOR (4 tablas independientes) -->
-<table style="margin-bottom: 2px;"><tr style="text-align: center; font-weight: bold;"><td>DATOS DEL PROVEEDOR</td></tr></table>
-<table><tr><td style="width: 50%;"><strong>NOMBRE:</strong> KRYOTEC SERVICIOS SAS</td><td style="width: 50%;"><strong>NIT:</strong> 900.719.852-0</td></tr></table>
-<table><tr><td style="width: 50%;"><strong>CONSECUTIVO:</strong> ${consecutivo}</td><td style="width: 50%;"><strong># COTIZACION:</strong></td></tr></table>
-<table style="margin-bottom: 4px;"><tr><td style="width: 50%;"><strong>TIENDA (CEDI):</strong> ${tienda?.tienda || e?.ubicacion || ''}</td><td style="width: 50%;"><strong>ID SERVICIO:</strong> ${idServicio}</td></tr></table>
-<!-- SECCION 3: TIPO DE SERVICIO SOLICITADO -->
-<table><tr style="text-align: center; font-weight: bold;"><td>TIPO DE SERVICIO SOLICITADO</td></tr></table>
-<table><tr><td style="width: 25%;"><strong>TIPO MANTENIMIENTO</strong></td><td style="width: 25%;">${tipoMant === 'Preventivo' ? '☒' : '☐'} Preventivo</td><td style="width: 25%;">${tipoMant === 'Correctivo' ? '☒' : '☐'} Correctivo</td><td style="width: 25%;">${tipoMant === 'Emergencia' ? '☒' : '☐'} Emergencia</td></tr></table>
-<table><tr><td style="width: 15%;"><strong>ESPECIALIDAD</strong></td><td>${check('Civil', especialidadesSel)} Civil</td><td>${check('Eléctrico', especialidadesSel)} Eléctrico</td><td>${check('Metalmecánico', especialidadesSel)} Metalmecánico</td><td>${check('Refrigeración', especialidadesSel)} Refrigeración</td><td>${check('Plomería', especialidadesSel)} Plomería</td><td>${check('Cerrajería', especialidadesSel)} Cerrajería</td><td>${check('Otro', especialidadesSel)} Otro</td></tr></table>
-<table><tr><td style="width: 20%;"><strong>INFORMACION DEL EQUIPO</strong></td><td>${check('Isla congeladora', equiposSel)} Isla congeladora</td><td>${check('Nevera', equiposSel)} Nevera</td><td>${check('Aire acondicionado', equiposSel)} Aire acondicionado</td><td>${check('Cortina de aire', equiposSel)} Cortina de aire</td><td>${check('Otro', equiposSel)} Otro</td></tr></table>
-<!-- SECCION 4: DESCRIPCION DEL SERVICIO EJECUTADO -->
-<table style="margin-top: 4px;"><tr style="text-align: center; font-weight: bold;"><td>DESCRIPCIÓN DEL SERVICIO EJECUTADO</td></tr></table>
-<table>${[0,1,2,3,4].map(i => `<tr class="linea-gris"><td style="padding: 2px 4px;">${fallaLines[i] || ''}</td></tr>`).join('')}</table>
-<table>${[0,1,2,3,4].map(i => `<tr class="linea-gris"><td style="padding: 2px 4px;">${trabajoLines[i] || ''}</td></tr>`).join('')}</table>
-<table>${[0,1,2].map(i => `<tr class="linea-gris"><td style="padding: 2px 4px;">${entregaLines[i] || ''}</td></tr>`).join('')}</table>
-<table style="margin-bottom: 4px;"><tr><td><strong>Estado final del equipo:</strong> ${estado}</td></tr></table>
-<!-- SECCION 5: EVIDENCIAS FOTOGRÁFICAS -->
-<table><tr style="text-align: center; font-weight: bold;"><td>EVIDENCIAS FOTOGRÁFICAS</td></tr></table>
-<table><tr><td style="width: 50%; text-align: center;">ANTES<br>${fotosBase64[0] ? `<img src="${fotosBase64[0]}" class="foto-img">` : ''}</td><td style="width: 50%; text-align: center;">DESPUÉS<br>${fotosBase64[1] ? `<img src="${fotosBase64[1]}" class="foto-img">` : ''}</td></tr></table>
-<!-- SECCION 6: OBSERVACIONES -->
-<table><tr style="text-align: center; font-weight: bold;"><td>OBSERVACIONES O RECOMENDACIONES</td></tr></table>
-<table>${[0,1,2,3,4].map(i => `<tr class="linea-gris"><td style="padding: 2px 4px;">${obsLines[i] || ''}</td></tr>`).join('')}</table>
-<!-- SECCION 7: FIRMAS -->
-<table><tr style="text-align: center; font-weight: bold;"><td>ENTREGA A SATISFACCIÓN D1 SAS</td></tr></table>
-<table><tr><td style="width: 25%;"><strong>Firma del Proveedor:</strong></td><td style="width: 25%;" class="firma-meddon">${sesionActual?.nombre || ''}</td><td style="width: 25%;"><strong>Firma (D1 SAS):</strong></td><td style="width: 25%;">${d1FirmaDataUrl ? `<img src="${d1FirmaDataUrl}" style="max-height:40px;max-width:100px;">` : ''}</td></tr><tr><td><strong>Nombre Completo:</strong></td><td>${sesionActual?.nombre || ''}</td><td><strong>Nombre Completo:</strong></td><td>${funcNombre}</td></tr><tr><td><strong>Identificacion:</strong></td><td>${sesionActual?.cedula || ''}</td><td><strong>Identificacion:</strong></td><td>${funcId}</td></tr><tr><td colspan="2"></td><td colspan="2"><div style="text-align:center;">${selloUrl ? `<img src="${selloUrl}" style="max-height:60px;">` : ''}</div></td></tr></table>
-<!-- SECCION 8: NOTA LEGAL -->
-<div class="nota">Nota: Se deben diligenciar los campos de forma clara y legible, sin tachones y enmendaduras; este documento debe entregarse diligenciado en su totalidad de lo contrario no sera valido</div></body></html>`;
+    const chk = (val, lista) => lista.includes(val)
+        ? '<span style="font-size:12pt;">&#9632;</span>'
+        : '<span style="font-size:10pt;">&#9744;</span>';
+    const fmtCed = n => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+
+    // Descripcion: falla(5 lineas) + trabajo(5 lineas) + entrega(2 lineas) + estado(1 linea)
+    const fLines = falla.split('\n');
+    const tLines = trabajo.split('\n');
+    const enLines = entrega.split('\n');
+    const oLines = observaciones.split('\n');
+    const descRows = (lines, count, isLast) => Array.from({length: count}, (_, i) => {
+        const last = i === count - 1;
+        const bBottom = last ? '2px solid #000' : '1px solid #aaa';
+        return `<tr><td style="border-left:2px solid #000;border-right:2px solid #000;border-top:none;border-bottom:${bBottom};height:11px;padding:0 4px 1px 4px;font-size:8.5pt;vertical-align:bottom;white-space:normal;overflow:hidden;">${lines[i] || ''}&nbsp;</td></tr>`;
+    }).join('');
+
+    return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+<title>Acta_D1_${consecutivo}</title>
+<style>
+@font-face { font-family:'Meddon'; src:url('https://raw.githubusercontent.com/capacitADA/KRYOTEC/main/Meddon-Regular.ttf') format('truetype'); }
+body { font-family:Arial,sans-serif; margin:0; padding:10px 12px; font-size:7.5pt; line-height:1.2; background:#fff; width:770px; box-sizing:border-box; }
+table { width:100%; border-collapse:collapse; }
+td,th { border:1px solid #000; padding:2px 5px; vertical-align:bottom; font-size:7.5pt; white-space:nowrap; }
+.hd { font-weight:700; text-align:center; font-size:10pt; padding:3px; }
+.lbl { white-space:nowrap; font-weight:700; width:1px; }
+.nota { color:#e4002b; font-size:5.5pt; text-align:center; margin-top:5px; font-style:italic; }
+</style></head><body>
+
+<!-- CABECERA -->
+<table style="border:none;margin-bottom:4px;">
+  <tr>
+    <td style="border:none;padding:0 8px 0 0;vertical-align:middle;width:55px;"><img src="${logoD1Url}" style="height:38px;"></td>
+    <td style="border:none;text-align:center;vertical-align:middle;"><strong style="font-size:9.5pt;">ACTA DE ENTREGA SERVICIOS DE MANTENIMIENTO REGIONAL SANTANDER</strong></td>
+    <td style="border:none;text-align:right;vertical-align:middle;white-space:nowrap;">FECHA &nbsp;<span style="border:1px solid #000;padding:1px 5px;margin-right:-1px;">${dd}</span><span style="border:1px solid #000;padding:1px 5px;margin-right:-1px;">${mes}</span><span style="border:1px solid #000;padding:1px 5px;">${aa}</span></td>
+  </tr>
+</table>
+
+<!-- DATOS DEL PROVEEDOR -->
+<table style="border:2px solid #000;border-collapse:collapse;">
+  <tr><td colspan="4" class="hd">DATOS DEL PROVEEDOR</td></tr>
+  <tr><td class="lbl">NOMBRE:</td><td style="font-weight:700;">KRYOTEC SERVICIOS SAS</td><td class="lbl">NIT:</td><td>900719852-0</td></tr>
+  <tr><td class="lbl">CONSECUTIVO:</td><td style="font-weight:700;color:#e4002b;">${consecutivo}</td><td class="lbl"># COTIZACION:</td><td></td></tr>
+  <tr><td class="lbl">TIENDA (CEDI):</td><td>${tienda?.tienda || e?.ubicacion || ''}</td><td class="lbl">ID DEL SERVICIO:</td><td>${idServicio}</td></tr>
+</table>
+
+<!-- TIPO DE SERVICIO -->
+<table style="border:2px solid #000;border-collapse:collapse;margin-top:-2px;">
+  <tr><td class="hd">TIPO DE SERVICIO SOLICITADO</td></tr>
+</table>
+<table style="border:2px solid #000;border-collapse:collapse;margin-top:-2px;">
+  <tr>
+    <td class="lbl">TIPO DE MANTENIMIENTO: <em>MARQUE X</em></td>
+    <td>Preventivo ${chk('Preventivo',[tipoMant])}</td>
+    <td>Correctivo ${chk('Correctivo',[tipoMant])}</td>
+    <td>Emergencia ${chk('Emergencia',[tipoMant])}</td>
+  </tr>
+</table>
+<table style="border:2px solid #000;border-collapse:collapse;margin-top:-2px;">
+  <tr>
+    <td class="lbl">ESPECIALIDAD: <em>MARQUE X</em></td>
+    <td>Civil ${chk('Civil',especialidadesSel)}</td>
+    <td>El&eacute;ctrico ${chk('Eléctrico',especialidadesSel)}</td>
+    <td>Metalmec&aacute;nico ${chk('Metalmecánico',especialidadesSel)}</td>
+    <td>Refrigeraci&oacute;n ${chk('Refrigeración',especialidadesSel)}</td>
+    <td>Plomer&iacute;a ${chk('Plomería',especialidadesSel)}</td>
+    <td>Cerrajer&iacute;a ${chk('Cerrajería',especialidadesSel)}</td>
+    <td>Otro ${chk('Otro',especialidadesSel)}</td>
+  </tr>
+</table>
+<table style="border:2px solid #000;border-collapse:collapse;margin-top:-2px;">
+  <tr>
+    <td class="lbl">INFORMACION DEL EQUIPO: <em>MARQUE X</em></td>
+    <td>Nevera ${chk('Nevera',equiposSel)}</td>
+    <td>Aire acondicionado ${chk('Aire acondicionado',equiposSel)}</td>
+    <td>Congelador ${chk('Congelador',equiposSel)}</td>
+    <td>Cortina de aire ${chk('Cortina de aire',equiposSel)}</td>
+    <td>Otro ${chk('Otro',equiposSel)}</td>
+  </tr>
+</table>
+
+<!-- DESCRIPCION -->
+<table style="border:2px solid #000;border-collapse:collapse;margin-top:-2px;">
+  <tr><td class="hd">DESCRIPCION DEL SERVICIO EJECUTADO</td></tr>
+</table>
+<table style="width:100%;border-collapse:collapse;">${descRows(fLines,5,false)}${descRows(tLines,5,false)}${descRows(enLines,2,false)}<tr><td style="border:2px solid #000;padding:2px 5px;font-size:8.5pt;">Estado final del equipo: ${estado}</td></tr></table>
+
+<!-- EVIDENCIAS -->
+<table style="border:2px solid #000;border-collapse:collapse;margin-top:-2px;">
+  <tr><td colspan="2" class="hd">EVIDENCIAS (FOTOGRAFIAS)</td></tr>
+  <tr>
+    <td style="width:50%;text-align:center;font-weight:700;padding:2px;">ANTES</td>
+    <td style="width:50%;text-align:center;font-weight:700;padding:2px;">DESPUES</td>
+  </tr>
+  <tr>
+    <td style="height:160px;text-align:center;vertical-align:middle;">${fotosBase64[0] ? `<img src="${fotosBase64[0]}" style="max-width:100%;max-height:155px;">` : ''}</td>
+    <td style="height:160px;text-align:center;vertical-align:middle;">${fotosBase64[1] ? `<img src="${fotosBase64[1]}" style="max-width:100%;max-height:155px;">` : ''}</td>
+  </tr>
+</table>
+
+<!-- OBSERVACIONES -->
+<table style="border:2px solid #000;border-collapse:collapse;margin-top:-2px;">
+  <tr><td class="hd">OBSERVACIONES O RECOMENDACIONES</td></tr>
+</table>
+<table style="width:100%;border-collapse:collapse;">${descRows(oLines,5,true)}</table>
+
+<!-- ENTREGA A SATISFACCION -->
+<table style="border:2px solid #000;border-collapse:collapse;margin-top:-2px;">
+  <tr><td colspan="4" class="hd">ENTREGA A SATISFACCION D1 SAS</td></tr>
+  <tr>
+    <td colspan="2" style="width:50%;text-align:center;padding:6px;vertical-align:middle;">SELLO</td>
+    <td colspan="2" style="width:50%;text-align:center;vertical-align:middle;">${selloUrl ? `<img src="${selloUrl}" style="max-height:62px;">` : ''}</td>
+  </tr>
+  <tr>
+    <td class="lbl">FIRMA (PROVEEDOR)</td>
+    <td style="vertical-align:middle;">${firmaTecBase64 ? `<img src="${firmaTecBase64}" style="height:30px;">` : ''}</td>
+    <td class="lbl">FIRMA (D1 SAS)</td>
+    <td style="vertical-align:middle;">${d1FirmaDataUrl ? `<img src="${d1FirmaDataUrl}" style="max-height:30px;max-width:120px;">` : ''}</td>
+  </tr>
+  <tr>
+    <td class="lbl">NOMBRE COMPLETO</td>
+    <td>${sesionActual?.nombre || ''}</td>
+    <td class="lbl">NOMBRE COMPLETO</td>
+    <td>${funcNombre}</td>
+  </tr>
+  <tr>
+    <td class="lbl">IDENTIFICACION</td>
+    <td>${fmtCed(sesionActual?.cedula || '')}</td>
+    <td class="lbl">IDENTIFICACION</td>
+    <td>${fmtCed(funcId)}</td>
+  </tr>
+</table>
+<div class="nota">Nota: Se debe diligenciar los campos de firma clara y legible, sin tachones y enmendados; este documento debe entregarse diligenciado en su totalidad de lo contrario no ser&aacute; v&aacute;lido</div>
+</body></html>`;
 }
 
 // ============================================
