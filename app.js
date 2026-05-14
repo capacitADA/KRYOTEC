@@ -529,78 +529,119 @@ async function exportarActaD1(eid, consecutivo) {
     if (!funcId) { toast('⚠️ Ingresa la identificación del funcionario'); return; }
     const fotosBase64 = [];
     for (let i = 0; i < fotosD1.length; i++) {
-        if (fotosD1[i]) { fotosBase64.push(await comprimirImagenD1(fotosD1[i])); } else { fotosBase64.push(''); }
+        fotosBase64.push(fotosD1[i] ? await comprimirImagenD1(fotosD1[i]) : '');
     }
+    // Guardar en Firestore
     try {
-        await addDoc(collection(db, 'servicios'), { equipoId: eid, tipo: 'Mantenimiento', fecha: new Date().toISOString().split('T')[0], tecnico: sesionActual?.nombre || '', descripcion: `[D1] ${falla.substring(0,100)}`, proximoMantenimiento: null, fotos: fotosBase64.filter(f=>f), consecutivoD1: consecutivo, idServicioD1: idServicio, tipoMantenimiento: tipoMant, especialidades: especialidadesSel, equipos: equiposSel, falla, trabajoRealizado: trabajo, condicionEntrega: entrega, estadoEntrega: estado, observaciones, funcionarioNombre: funcNombre, funcionarioId: funcId, idTienda: e?.idTienda || '' });
+        await addDoc(collection(db, 'servicios'), {
+            equipoId: eid, tipo: 'Mantenimiento', fecha: new Date().toISOString().split('T')[0],
+            tecnico: sesionActual?.nombre || '', descripcion: `[D1] ${falla.substring(0,100)}`,
+            proximoMantenimiento: null, fotos: fotosBase64.filter(f=>f),
+            consecutivoD1: consecutivo, idServicioD1: idServicio, tipoMantenimiento: tipoMant,
+            especialidades: especialidadesSel, equipos: equiposSel, falla,
+            trabajoRealizado: trabajo, condicionEntrega: entrega, estadoEntrega: estado,
+            observaciones, funcionarioNombre: funcNombre, funcionarioId: funcId, idTienda: e?.idTienda || ''
+        });
         toast('✅ Servicio D1 guardado'); await cargarDatos();
     } catch (err) { toast('⚠️ Error guardando: ' + err.message); }
+    // Firma canvas funcionario D1
     const firmaCanvas = document.getElementById('d1FirmaCanvas');
     if (firmaCanvas) d1FirmaDataUrl = firmaCanvas.toDataURL('image/png');
+    // Sello D1
     let selloUrl = '';
     try { selloUrl = await generarSelloD1(tienda?.tienda || e?.ubicacion || 'D1'); } catch(err) { console.warn(err); }
+    // Fecha
     const hoy = new Date();
     const dd = String(hoy.getDate()).padStart(2,'0');
-    const MESES_N = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
-    const mes = MESES_N[hoy.getMonth()];
+    const MESES_ES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+    const mes = MESES_ES[hoy.getMonth()];
     const aa = String(hoy.getFullYear());
-    // Firma técnico con fuente Meddon (igual que Acta_D1_Kryotec_v3.html)
+    // Firma técnico — canvas con fuente Meddon (igual que Acta_D1_Kryotec_v3.html)
     let firmaTecBase64 = '';
     try {
         firmaTecBase64 = await new Promise(resolve => {
-            const font = new FontFace('Meddon','url(https://raw.githubusercontent.com/capacitADA/KRYOTEC/main/Meddon-Regular.ttf)');
+            const font = new FontFace('Meddon', 'url(https://raw.githubusercontent.com/capacitADA/KRYOTEC/main/Meddon-Regular.ttf)');
             font.load().then(loaded => {
                 document.fonts.add(loaded);
-                const c = document.createElement('canvas'); c.width=280; c.height=54;
+                const c = document.createElement('canvas'); c.width = 280; c.height = 54;
                 const ctx = c.getContext('2d');
                 ctx.font = '28px Meddon'; ctx.fillStyle = '#111';
-                ctx.fillText(sesionActual?.nombre||'', 6, 40);
+                ctx.fillText(sesionActual?.nombre || '', 6, 40);
                 resolve(c.toDataURL('image/png'));
             }).catch(() => {
-                const c = document.createElement('canvas'); c.width=280; c.height=54;
+                const c = document.createElement('canvas'); c.width = 280; c.height = 54;
                 const ctx = c.getContext('2d');
                 ctx.font = 'italic 22px Georgia'; ctx.fillStyle = '#111';
-                ctx.fillText(sesionActual?.nombre||'', 6, 38);
+                ctx.fillText(sesionActual?.nombre || '', 6, 38);
                 resolve(c.toDataURL('image/png'));
             });
         });
     } catch(err) { console.warn(err); }
-    const html = generarHtmlActaD1PDF({ consecutivo, idServicio, tienda, e, tipoMant, especialidadesSel, equiposSel, falla, trabajo, entrega, estado, observaciones, funcNombre, funcId, selloUrl, dd, mes, aa, fotosBase64, firmaTecBase64 });
+    // Firma garabato funcionario D1 (si no hay canvas)
+    let firmaFunBase64 = d1FirmaDataUrl || '';
+    if (!firmaFunBase64) {
+        const gc = document.createElement('canvas'); gc.width = 180; gc.height = 44;
+        const gctx = gc.getContext('2d');
+        gctx.strokeStyle = '#111'; gctx.lineWidth = 1.8; gctx.lineCap = 'round';
+        gctx.beginPath();
+        gctx.moveTo(10,32); gctx.bezierCurveTo(35,8,55,36,80,22);
+        gctx.bezierCurveTo(100,10,115,34,140,28);
+        gctx.bezierCurveTo(150,24,160,30,170,26);
+        gctx.stroke();
+        firmaFunBase64 = gc.toDataURL('image/png');
+    }
+    const html = generarHtmlActaD1PDF({ consecutivo, idServicio, tienda, e, tipoMant,
+        especialidadesSel, equiposSel, falla, trabajo, entrega, estado, observaciones,
+        funcNombre, funcId, selloUrl, dd, mes, aa, fotosBase64, firmaTecBase64, firmaFunBase64 });
     const nombreArch = `Acta_D1_${consecutivo}_${new Date().toISOString().slice(0,19).replace(/:/g,'-')}`;
     driveUploadPDF(html, nombreArch + '.pdf').catch(err => console.warn('Drive:', err));
     toast('⏳ Generando PDF...');
     try {
+        // Cargar librerías si no están
         await Promise.all([
-            window.html2canvas ? Promise.resolve() : new Promise((res,rej)=>{ const s=document.createElement('script'); s.src='https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js'; s.onload=res; s.onerror=rej; document.head.appendChild(s); }),
-            window.jspdf       ? Promise.resolve() : new Promise((res,rej)=>{ const s=document.createElement('script'); s.src='https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'; s.onload=res; s.onerror=rej; document.head.appendChild(s); })
+            window.html2canvas ? Promise.resolve() : new Promise((res,rej) => {
+                const s = document.createElement('script');
+                s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+                s.onload = res; s.onerror = rej; document.head.appendChild(s);
+            }),
+            window.jspdf ? Promise.resolve() : new Promise((res,rej) => {
+                const s = document.createElement('script');
+                s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+                s.onload = res; s.onerror = rej; document.head.appendChild(s);
+            })
         ]);
-        await new Promise(r=>setTimeout(r,300));
-        const wrap = document.createElement('div');
-        wrap.style.cssText = 'position:fixed;left:-9999px;top:0;width:794px;background:white;z-index:-1;';
-        const bodyM = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
-        wrap.innerHTML = bodyM ? bodyM[1] : html;
-        document.body.appendChild(wrap);
+        await new Promise(r => setTimeout(r, 300));
+        // Renderizar el HTML completo en iframe oculto para preservar los estilos del <head>
+        const iframe = document.createElement('iframe');
+        iframe.style.cssText = 'position:fixed;left:-9999px;top:0;width:794px;height:1200px;border:none;z-index:-1;';
+        document.body.appendChild(iframe);
+        iframe.contentDocument.open();
+        iframe.contentDocument.write(html);
+        iframe.contentDocument.close();
         await document.fonts.ready;
-        await new Promise(r=>setTimeout(r,900));
-        const canvas = await window.html2canvas(wrap, { scale:2.5, backgroundColor:'#ffffff', useCORS:true, allowTaint:true, logging:false, windowWidth:794 });
-        document.body.removeChild(wrap);
+        await new Promise(r => setTimeout(r, 1200));
+        const canvas = await window.html2canvas(iframe.contentDocument.body, {
+            scale: 2.5, backgroundColor: '#ffffff', useCORS: true,
+            allowTaint: true, logging: false, windowWidth: 794
+        });
+        document.body.removeChild(iframe);
         const { jsPDF } = window.jspdf;
-        const pdf = new jsPDF({ unit:'mm', format:'a4', orientation:'portrait' });
-        const imgW=210, imgH=(canvas.height*imgW)/canvas.width;
-        pdf.addImage(canvas.toDataURL('image/png'),'PNG',0,0,imgW,imgH);
-        pdf.save(nombreArch+'.pdf');
+        const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+        const imgW = 210;
+        const imgH = (canvas.height * imgW) / canvas.width;
+        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, imgW, imgH);
+        pdf.save(nombreArch + '.pdf');
         toast('✅ PDF descargado');
     } catch(pdfErr) {
-        console.error(pdfErr);
-        const blob = new Blob([html],{type:'text/html;charset=utf-8'});
+        console.error('PDF error:', pdfErr);
+        const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
         const url = URL.createObjectURL(blob);
-        const a = document.createElement('a'); a.href=url; a.download=nombreArch+'.html'; a.click();
+        const a = document.createElement('a'); a.href = url; a.download = nombreArch + '.html'; a.click();
         URL.revokeObjectURL(url);
-        toast('⚠️ Descargado como HTML (PDF falló)');
+        toast('⚠️ PDF falló — descargado como HTML');
     }
     closeModal();
 }
-
 
 // ============================================
 // GENERAR HTML DEL PDF DEL ACTA D1 - SECCIONES 1 A 8
@@ -608,38 +649,30 @@ async function exportarActaD1(eid, consecutivo) {
 function generarHtmlActaD1PDF(data) {
     const { consecutivo, idServicio, tienda, e, tipoMant, especialidadesSel, equiposSel,
             falla, trabajo, entrega, estado, observaciones, funcNombre, funcId,
-            selloUrl, dd, mes, aa, fotosBase64, firmaTecBase64 } = data;
-    const tecNombre  = sesionActual?.nombre || '';
-    const tecCedula  = sesionActual?.cedula  || '';
+            selloUrl, dd, mes, aa, fotosBase64, firmaTecBase64, firmaFunBase64 } = data;
+    const tecNombre = sesionActual?.nombre || '';
+    const tecCedula = sesionActual?.cedula  || '';
     const nombreTienda = tienda?.tienda || e?.ubicacion || '';
-
-    function fmtCed(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g,'.'); }
+    function fmtCed(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.'); }
     function chk(val, lista) {
         return lista.includes(val)
             ? '<span style="font-size:12pt;">&#9632;</span>'
             : '<span style="font-size:10pt;">&#9744;</span>';
     }
-
-    // Descripción: misma lógica que el HTML v3 — líneas fijas
-    const fallaL   = falla.split('\n');
-    const trabajoL = trabajo.split('\n');
-    const entregaL = entrega.split('\n');
-    const obsL     = observaciones.split('\n');
-
     const descLines = [
-        fallaL[0]||'', fallaL[1]||'', fallaL[2]||'', fallaL[3]||'', fallaL[4]||'',
-        trabajoL[0]||'', trabajoL[1]||'', trabajoL[2]||'', trabajoL[3]||'', trabajoL[4]||'',
-        entregaL[0]||'', entregaL[1]||'',
+        ...(falla.split('\n').concat(['','','','','']).slice(0,5)),
+        ...(trabajo.split('\n').concat(['','','','','']).slice(0,5)),
+        ...(entrega.split('\n').concat(['','']).slice(0,2)),
         `Estado final del equipo: ${estado}`, ''
     ];
     const lineRows = descLines.map((t,i) => {
-        const isLast = i === descLines.length-1;
-        return `<tr class="${isLast?'rl-last':'rl'}"><td>${t}&nbsp;</td></tr>`;
+        const isLast = i === descLines.length - 1;
+        return `<tr class="${isLast ? 'rl-last' : 'rl'}"><td>${t}&nbsp;</td></tr>`;
     }).join('');
-    const obsRows = ['','','','',''].map((t,i,a) =>
-        `<tr class="${i===a.length-1?'rl-last':'rl'}"><td>${obsL[i]||''}&nbsp;</td></tr>`
+    const obsLines = observaciones.split('\n').concat(['','','','','']).slice(0,5);
+    const obsRows = obsLines.map((t,i,a) =>
+        `<tr class="${i===a.length-1 ? 'rl-last' : 'rl'}"><td>${t}&nbsp;</td></tr>`
     ).join('');
-
     return `<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -647,13 +680,13 @@ function generarHtmlActaD1PDF(data) {
 <title>Acta_D1_${consecutivo}</title>
 <style>
 @font-face { font-family:'Meddon'; src:url('https://raw.githubusercontent.com/capacitADA/KRYOTEC/main/Meddon-Regular.ttf') format('truetype'); }
-body { font-family:Arial,sans-serif; background:#fff; padding:14px 16px; font-size:7.5pt; line-height:1.2; box-sizing:border-box; width:794px; }
+body { font-family:Arial,sans-serif; background:#fff; padding:14px 16px; font-size:7.5pt; line-height:1.2; box-sizing:border-box; width:794px; margin:0; }
 .bloque { border:2px solid #000; border-collapse:collapse; width:100%; margin-top:-2px; }
 .bloque td,.bloque th { border:1px solid #000; padding:2px 5px; vertical-align:bottom; font-size:7.5pt; white-space:nowrap; }
-.hd { font-weight:700; text-align:center; font-size:9pt; padding:3px; }
+.hd { font-weight:700; text-align:center; font-size:9pt; padding:3px; background:transparent; }
 .lbl { white-space:nowrap; font-weight:700; width:1px; }
-.rl td { border-left:2px solid #000; border-right:2px solid #000; border-top:none; border-bottom:1px solid #aaa; height:9px; padding:0 4px 0 4px; font-size:8.5pt; vertical-align:bottom; white-space:normal; overflow:hidden; }
-.rl-last td { border-left:2px solid #000; border-right:2px solid #000; border-top:none; border-bottom:2px solid #000; height:9px; padding:0 4px 0 4px; font-size:8.5pt; vertical-align:bottom; white-space:normal; overflow:hidden; }
+.rl td { border-left:2px solid #000; border-right:2px solid #000; border-top:none; border-bottom:1px solid #aaa; height:9px; padding:0 4px 0px 4px; font-size:8.5pt; vertical-align:bottom; white-space:normal; overflow:hidden; }
+.rl-last td { border-left:2px solid #000; border-right:2px solid #000; border-top:none; border-bottom:2px solid #000; height:9px; padding:0 4px 0px 4px; font-size:8.5pt; vertical-align:bottom; white-space:normal; overflow:hidden; }
 .nota { color:#e4002b; font-size:5.5pt; text-align:center; margin-top:4px; font-style:italic; }
 </style>
 </head>
@@ -669,8 +702,7 @@ body { font-family:Arial,sans-serif; background:#fff; padding:14px 16px; font-si
       <strong style="font-size:9.5pt;">ACTA DE ENTREGA SERVICIOS DE MANTENIMIENTO REGIONAL SANTANDER</strong>
     </td>
     <td style="border:none;text-align:right;vertical-align:middle;white-space:nowrap;">
-      FECHA &nbsp;
-      <span style="border:1px solid #000;padding:1px 5px;margin-right:-1px;">${dd}</span><span style="border:1px solid #000;padding:1px 5px;margin-right:-1px;">${mes}</span><span style="border:1px solid #000;padding:1px 5px;">${aa}</span>
+      FECHA &nbsp;<span style="border:1px solid #000;padding:1px 5px;margin-right:-1px;">${dd}</span><span style="border:1px solid #000;padding:1px 5px;margin-right:-1px;">${mes}</span><span style="border:1px solid #000;padding:1px 5px;">${aa}</span>
     </td>
   </tr>
 </table>
@@ -679,8 +711,8 @@ body { font-family:Arial,sans-serif; background:#fff; padding:14px 16px; font-si
 <table class="bloque">
   <tr><td colspan="4" class="hd" style="font-size:10pt;">DATOS DEL PROVEEDOR</td></tr>
   <tr>
-    <td class="lbl">NOMBRE:</td><td style="font-weight:700;">KRYOTEC SERVICIOS SAS</td>
-    <td class="lbl">NIT:</td><td>900719852-0</td>
+    <td class="lbl">NOMBRE:</td><td style="font-weight:700;width:auto;">KRYOTEC SERVICIOS SAS</td>
+    <td class="lbl">NIT:</td><td style="width:auto;">900719852-0</td>
   </tr>
   <tr>
     <td class="lbl">CONSECUTIVO:</td><td style="font-weight:700;color:#e4002b;">${consecutivo}</td>
@@ -708,11 +740,11 @@ body { font-family:Arial,sans-serif; background:#fff; padding:14px 16px; font-si
   <tr>
     <td class="lbl">ESPECIALIDAD: <em>MARQUE X</em></td>
     <td>Civil ${chk('Civil',especialidadesSel)}</td>
-    <td>El&eacute;ctrico ${chk('Eléctrico',especialidadesSel)}</td>
-    <td>Metalmec&aacute;nico ${chk('Metalmecánico',especialidadesSel)}</td>
-    <td>Refrigeraci&oacute;n ${chk('Refrigeración',especialidadesSel)}</td>
-    <td>Plomer&iacute;a ${chk('Plomería',especialidadesSel)}</td>
-    <td>Cerrajer&iacute;a ${chk('Cerrajería',especialidadesSel)}</td>
+    <td>El&eacute;ctrico ${chk('El\u00e9ctrico',especialidadesSel)}</td>
+    <td>Metalmec&aacute;nico ${chk('Metalmec\u00e1nico',especialidadesSel)}</td>
+    <td>Refrigeraci&oacute;n ${chk('Refrigeraci\u00f3n',especialidadesSel)}</td>
+    <td>Plomer&iacute;a ${chk('Plomer\u00eda',especialidadesSel)}</td>
+    <td>Cerrajer&iacute;a ${chk('Cerrajer\u00eda',especialidadesSel)}</td>
     <td>Otro ${chk('Otro',especialidadesSel)}</td>
   </tr>
 </table>
@@ -741,8 +773,8 @@ body { font-family:Arial,sans-serif; background:#fff; padding:14px 16px; font-si
     <td style="width:50%;text-align:center;font-weight:700;padding:2px;">DESPUES</td>
   </tr>
   <tr>
-    <td style="height:200px;text-align:center;vertical-align:middle;">${fotosBase64[0]?`<img src="${fotosBase64[0]}" style="max-width:100%;max-height:195px;">`:'&nbsp;'}</td>
-    <td style="height:200px;text-align:center;vertical-align:middle;">${fotosBase64[1]?`<img src="${fotosBase64[1]}" style="max-width:100%;max-height:195px;">`:'&nbsp;'}</td>
+    <td style="height:200px;text-align:center;vertical-align:middle;">${fotosBase64[0] ? `<img src="${fotosBase64[0]}" style="max-width:100%;max-height:195px;">` : '&nbsp;'}</td>
+    <td style="height:200px;text-align:center;vertical-align:middle;">${fotosBase64[1] ? `<img src="${fotosBase64[1]}" style="max-width:100%;max-height:195px;">` : '&nbsp;'}</td>
   </tr>
 </table>
 
@@ -758,14 +790,14 @@ body { font-family:Arial,sans-serif; background:#fff; padding:14px 16px; font-si
   <tr>
     <td colspan="2" style="width:50%;text-align:center;height:65px;vertical-align:middle;">SELLO</td>
     <td colspan="2" style="width:50%;text-align:center;vertical-align:middle;">
-      ${selloUrl?`<img src="${selloUrl}" style="max-height:62px;">`:'&nbsp;'}
+      ${selloUrl ? `<img src="${selloUrl}" style="max-height:62px;">` : '&nbsp;'}
     </td>
   </tr>
   <tr>
     <td class="lbl">FIRMA (PROVEEDOR)</td>
-    <td>${firmaTecBase64?`<img src="${firmaTecBase64}" style="height:30px;">`:'&nbsp;'}</td>
+    <td>${firmaTecBase64 ? `<img src="${firmaTecBase64}" style="height:30px;">` : '&nbsp;'}</td>
     <td class="lbl">FIRMA (D1 SAS)</td>
-    <td>${d1FirmaDataUrl?`<img src="${d1FirmaDataUrl}" style="max-height:28px;max-width:130px;">`:'&nbsp;'}</td>
+    <td>${firmaFunBase64 ? `<img src="${firmaFunBase64}" style="max-height:28px;max-width:130px;">` : '&nbsp;'}</td>
   </tr>
   <tr>
     <td class="lbl">NOMBRE COMPLETO</td><td>${tecNombre}</td>
@@ -781,7 +813,6 @@ body { font-family:Arial,sans-serif; background:#fff; padding:14px 16px; font-si
 </body>
 </html>`;
 }
-
 
 // ============================================
 // MODAL QR Y MANEJO DE RUTA QR (SIMPLIFICADOS)
