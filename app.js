@@ -560,7 +560,7 @@ async function exportarActaD1(eid, consecutivo) {
             equipoId: eid, tipo: tipoMant, fecha: new Date().toISOString().split('T')[0],
             tecnico: sesionActual?.nombre || '', descripcion: `[D1] ${falla.substring(0,100)}`,
             proximoMantenimiento: null, fotos: fotosBase64.filter(f=>f),
-            consecutivoD1: consecutivo, idServicioD1: idServicio, tipoMantenimiento: tipoMant,
+            consecutivoD1: consecutivo, idServicioD1: idServicio,
             especialidades: especialidadesSel, equipos: equiposSel, falla,
             trabajoRealizado: trabajo, condicionEntrega: entrega, estadoEntrega: estado,
             observaciones, funcionarioNombre: funcNombre, funcionarioId: funcId, idTienda: e?.idTienda || ''
@@ -844,40 +844,50 @@ function modalQR(eid) {
     const e = getEq(eid); const c = getCl(e?.clienteId);
     const esD1c = esClienteD1(e?.clienteId);
     const tienda = esD1c ? getTiendaD1(e?.idTienda) : null;
-    const nombreTienda = tienda?.tienda || e?.ubicacion || c?.nombre || '';
+    const nombreTienda = tienda?.tienda || c?.nombre || '';
     const url = `${window.location.origin}${window.location.pathname}#/equipo/${eid}`;
     const LOGO = 'https://raw.githubusercontent.com/capacitADA/KRYOTEC/main/KRYOTEC_Logo.png';
+    const linea1 = `${e?.tipo||''} ${e?.marca||''} ${e?.modelo||''}`.trim();
     const qrDiv = document.createElement('div');
-    qrDiv.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:200px;height:200px;';
+    qrDiv.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:260px;height:260px;';
     document.body.appendChild(qrDiv);
-    new window.QRCode(qrDiv, { text: url, width: 200, height: 200 });
+    new window.QRCode(qrDiv, { text: url, width: 260, height: 260 });
     setTimeout(async () => {
         const qrDataUrl = qrDiv.querySelector('canvas').toDataURL('image/png');
         document.body.removeChild(qrDiv);
-        const logoImg = new Image(); logoImg.crossOrigin = 'Anonymous'; logoImg.src = LOGO;
-        const qrImg = new Image(); qrImg.src = qrDataUrl;
+        const logoImg = new Image(); logoImg.crossOrigin='Anonymous'; logoImg.src=LOGO;
+        const qrImg = new Image(); qrImg.src=qrDataUrl;
         await Promise.all([
-            new Promise(r => { logoImg.onload = r; logoImg.onerror = r; }),
-            new Promise(r => { qrImg.onload = r; })
+            new Promise(r=>{ logoImg.onload=r; logoImg.onerror=r; }),
+            new Promise(r=>{ qrImg.onload=r; })
         ]);
-        const W = 260, pad = 12, logoH = 36, qrS = 180, gap = 8, txtH = 34;
-        const H = pad + logoH + gap + qrS + gap + txtH + pad;
-        const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
-        const ctx = cv.getContext('2d');
-        ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,W,H);
-        const logoW = logoImg.naturalWidth ? logoImg.naturalWidth*(logoH/logoImg.naturalHeight) : 120;
-        ctx.drawImage(logoImg, (W-logoW)/2, pad, logoW, logoH);
-        ctx.drawImage(qrImg, (W-qrS)/2, pad+logoH+gap, qrS, qrS);
-        const linea1 = `${e?.tipo||''} ${e?.marca||''} ${e?.modelo||''}`.trim();
-        ctx.fillStyle = '#0c214a'; ctx.textAlign = 'center';
-        ctx.font = 'bold 11px Arial';
-        ctx.fillText(linea1, W/2, pad+logoH+gap+qrS+gap+14);
-        ctx.font = '10px Arial'; ctx.fillStyle = '#555';
-        ctx.fillText(nombreTienda, W/2, pad+logoH+gap+qrS+gap+28);
-        const finalUrl = cv.toDataURL('image/png');
-        showModal(`<div class="modal" style="max-width:320px;"><div class="modal-h"><h3>📱 Código QR</h3><button class="xbtn" onclick="closeModal()">✕</button></div><div class="modal-b" style="text-align:center;"><img src="${finalUrl}" style="width:100%;border-radius:8px;"><p style="font-size:0.75rem;color:#555;margin:6px 0;">${linea1}<br>${nombreTienda}</p><a href="${finalUrl}" download="QR_${e?.marca}_${e?.modelo}.png" class="btn btn-blue btn-full">⬇️ Descargar QR</a></div></div>`);
-    }, 200);
+        const W=300, pad=14, R=16, logoH=40, strip1=52, qrS=240, strip2=48;
+        const H = pad+logoH+pad+strip1+qrS+strip2+pad;
+        const cv=document.createElement('canvas'); cv.width=W; cv.height=H;
+        const ctx=cv.getContext('2d');
+        ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,W,H);
+        ctx.strokeStyle='#0c214a'; ctx.lineWidth=3;
+        ctx.beginPath(); ctx.roundRect(1.5,1.5,W-3,H-3,R); ctx.stroke();
+        if(logoImg.naturalWidth){
+            const lw=logoImg.naturalWidth*(logoH/logoImg.naturalHeight);
+            ctx.drawImage(logoImg,(W-lw)/2,pad,lw,logoH);
+        }
+        const s1y=pad+logoH+pad;
+        ctx.fillStyle='#0c214a'; ctx.fillRect(0,s1y,W,strip1);
+        ctx.fillStyle='#ffffff'; ctx.textAlign='center';
+        ctx.font='bold 14px Arial'; ctx.fillText(linea1,W/2,s1y+20);
+        ctx.font='12px Arial'; ctx.fillText(nombreTienda,W/2,s1y+38);
+        ctx.drawImage(qrImg,(W-qrS)/2,s1y+strip1,qrS,qrS);
+        const s2y=s1y+strip1+qrS;
+        ctx.fillStyle='#0c214a';
+        ctx.beginPath(); ctx.roundRect(0,s2y,W,strip2+pad,[0,0,R,R]); ctx.fill();
+        ctx.fillStyle='#ffffff'; ctx.font='bold 17px Arial'; ctx.textAlign='center';
+        ctx.fillText('☎  3133292510',W/2,s2y+strip2/2+6);
+        const finalUrl=cv.toDataURL('image/png');
+        showModal(`<div class="modal" style="max-width:340px;"><div class="modal-h"><h3>📱 Código QR</h3><button class="xbtn" onclick="closeModal()">✕</button></div><div class="modal-b" style="text-align:center;"><img src="${finalUrl}" style="width:100%;border-radius:12px;"><div style="margin-top:10px;"><a href="${finalUrl}" download="QR_${e?.marca||''}_${e?.modelo||''}.png" class="btn btn-blue btn-full">⬇️ Descargar QR</a></div></div></div>`);
+    }, 250);
 }
+
 
 
 // ============================================
@@ -961,45 +971,62 @@ ${cuerpo||'<p style="color:#aaa;">Sin servicios registrados.</p>'}
 
 function generarInformePDF(eid) {
     const e = getEq(eid); const c = getCl(e?.clienteId);
-    const ss = getServiciosEquipo(eid).sort((a,b) => new Date(b.fecha)-new Date(a.fecha));
-    const LOGO = 'https://raw.githubusercontent.com/capacitADA/KRYOTEC/main/KRYOTEC_Logo.png';
-    const serviciosHTML = ss.map(s => `
+    const esD1c = esClienteD1(e?.clienteId);
+    const tienda = esD1c ? getTiendaD1(e?.idTienda) : null;
+    const nombreTienda = tienda?.tienda || '';
+    const ss = getServiciosEquipo(eid).sort((a,b)=>new Date(b.fecha)-new Date(a.fecha));
+    const LOGO='https://raw.githubusercontent.com/capacitADA/KRYOTEC/main/KRYOTEC_Logo.png';
+    const fila=(lbl,val)=>val?`<tr><td style="color:#64748b;padding:3px 8px 3px 0;white-space:nowrap;font-size:8.5pt;">${lbl}</td><td style="font-weight:600;font-size:8.5pt;">${val}</td></tr>`:'';
+    const COLOR_TIPO={'Mantenimiento':'#1e3d7a','Preventivo':'#1e3d7a','Correctivo':'#b45309','Emergencia':'#dc2626','Reparacion':'#dc2626','Instalacion':'#16a34a'};
+    const serviciosHTML=ss.map(s=>`
         <div style="border:1px solid #dde3f0;border-radius:8px;padding:10px;margin-bottom:8px;break-inside:avoid;">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
-                <span style="background:${s.tipo==='Mantenimiento'?'#2563eb':s.tipo==='Reparacion'?'#dc2626':'#16a34a'};color:white;padding:2px 8px;border-radius:12px;font-size:8pt;">${s.tipo}</span>
-                <span style="font-size:8pt;color:#555;">${fmtFecha(s.fecha)}</span>
+                <span style="background:${COLOR_TIPO[s.tipo]||'#1e3d7a'};color:white;padding:2px 8px;border-radius:10px;font-size:7.5pt;">${s.tipo}</span>
+                <span style="font-size:7.5pt;color:#64748b;">${fmtFecha(s.fecha)}</span>
             </div>
-            <div style="font-size:8.5pt;">🔧 ${s.tecnico}</div>
-            <div style="font-size:8.5pt;margin-top:2px;">${s.descripcion}</div>
-            ${(s.fotos||[]).length ? `<div style="margin-top:4px;">${(s.fotos||[]).map(f=>`<img src="${f}" style="height:48px;border-radius:4px;margin-right:4px;">`).join('')}</div>` : ''}
+            <div style="font-size:8pt;">🔧 ${s.tecnico}</div>
+            <div style="font-size:8pt;margin-top:2px;">${s.descripcion}</div>
+            ${(s.fotos||[]).length?`<div style="margin-top:4px;">${(s.fotos||[]).map(f=>`<img src="${f}" style="height:46px;border-radius:4px;margin-right:4px;">`).join('')}</div>`:''}
         </div>`).join('');
-    const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
-<title>Informe_${e?.marca}_${e?.modelo}</title>
-<style>
-@page{size:letter;margin:10mm;}
-body{font-family:Arial,sans-serif;font-size:9pt;margin:0;padding:0;}
-.cols{column-count:2;column-gap:12px;}
-</style></head><body>
-<div style="display:flex;align-items:center;background:#0c214a;color:white;padding:10px 16px;border-radius:8px;margin-bottom:10px;">
-  <img src="${LOGO}" style="height:44px;margin-right:14px;" onerror="this.style.display='none'">
+    const html=`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+<title>Informe</title>
+<style>@page{size:letter;margin:10mm;}body{font-family:Arial,sans-serif;font-size:9pt;margin:0;color:#1a202c;}.cols{column-count:2;column-gap:12px;}</style>
+</head><body>
+<div style="display:flex;align-items:center;background:#0c214a;color:white;padding:12px 18px;border-radius:10px;margin-bottom:10px;">
+  <img src="${LOGO}" style="height:42px;margin-right:14px;" onerror="this.style.display='none'">
   <div>
-    <div style="font-size:13pt;font-weight:700;">INFORME TÉCNICO</div>
-    <div style="font-size:9pt;margin-top:2px;">KRYOTEC SERVICIOS SAS &nbsp;|&nbsp; 📞 313 329 2510</div>
+    <div style="font-size:14pt;font-weight:700;">INFORME TÉCNICO</div>
+    <div style="font-size:9pt;opacity:0.85;margin-top:2px;">KRYOTEC SERVICIOS SAS &nbsp;|&nbsp; 📞 313 329 2510</div>
   </div>
 </div>
-<div style="background:#f1f5f9;border-radius:8px;padding:10px 14px;margin-bottom:10px;font-size:9pt;">
-  <div><strong>Cliente:</strong> ${c?.nombre||'N/A'} &nbsp;&nbsp; <strong>Tienda / Ubicación:</strong> ${e?.ubicacion||''}</div>
-  <div style="margin-top:4px;"><strong>Activo:</strong> ${e?.tipo||''} ${e?.marca||''} ${e?.modelo||''} &nbsp;&nbsp; <strong>Serial:</strong> ${e?.serie||'N/A'}</div>
+<div style="background:#f1f5f9;border-radius:8px;padding:12px 16px;margin-bottom:10px;">
+  <div style="font-weight:700;font-size:9pt;color:#0c214a;margin-bottom:6px;">DATOS DEL EQUIPO</div>
+  <div style="display:flex;gap:20px;">
+    <table style="flex:1;border-collapse:collapse;">
+      ${fila('Cliente:', c?.nombre||'N/A')}
+      ${nombreTienda ? fila('Tienda:', nombreTienda) : ''}
+      ${fila('Activo:', ((e?.tipo||'')+' '+(e?.marca||'')+' '+(e?.modelo||'')).trim())}
+      ${fila('Serial:', e?.serie||'N/A')}
+    </table>
+    <table style="flex:1;border-collapse:collapse;">
+      ${fila('Refrigerante:', e?.refrigerante||'')}
+      ${fila('Capacidad:', e?.capacidad||'')}
+      ${fila('Voltaje:', e?.voltaje||'')}
+      ${fila('Año instalación:', e?.añoInstalacion||'')}
+      ${fila('Especialidad:', e?.especialidad||'')}
+    </table>
+  </div>
 </div>
 <div style="background:#0c214a;color:white;padding:5px 12px;border-radius:6px;font-weight:700;font-size:9pt;margin-bottom:8px;">HISTORIAL DE SERVICIOS (${ss.length})</div>
 <div class="cols">${serviciosHTML}</div>
-<p style="font-size:7pt;color:#aaa;margin-top:8px;">Generado: ${new Date().toLocaleString()}</p>
+<p style="font-size:7pt;color:#aaa;margin-top:10px;border-top:1px solid #eee;padding-top:6px;">Generado: ${new Date().toLocaleString()} · KRYOTEC SERVICIOS SAS</p>
 </body></html>`;
-    const blob = new Blob([html],{type:'text/html;charset=utf-8'});
-    const url = URL.createObjectURL(blob);
-    const v = window.open(url,'_blank');
+    const blob=new Blob([html],{type:'text/html;charset=utf-8'});
+    const url=URL.createObjectURL(blob);
+    const v=window.open(url,'_blank');
     if(v) setTimeout(()=>v.print(),600);
 }
+
 
 window.goTo=goTo; window.closeModal=closeModal; window.filtrarClientes=filtrarClientes; window.filtrarEquipos=filtrarEquipos; window.aplicarFiltros=aplicarFiltros; window.limpiarFiltros=limpiarFiltros; window.modalNuevoCliente=modalNuevoCliente; window.modalEditarCliente=modalEditarCliente; window.modalEliminarCliente=modalEliminarCliente; window.guardarCliente=guardarCliente; window.actualizarCliente=actualizarCliente; window.modalNuevoEquipo=modalNuevoEquipo; window.modalEditarEquipo=modalEditarEquipo; window.modalEliminarEquipo=modalEliminarEquipo; window.guardarEquipo=guardarEquipo; window.actualizarEquipo=actualizarEquipo; window.modalNuevoServicio=modalNuevoServicio; window.modalEditarServicio=modalEditarServicio; window.guardarServicio=guardarServicio; window.actualizarServicio=actualizarServicio; window.eliminarServicio=eliminarServicio; window.modalNuevoTecnico=modalNuevoTecnico; window.modalEditarTecnico=modalEditarTecnico; window.guardarTecnico=guardarTecnico; window.actualizarTecnico=actualizarTecnico; window.eliminarTecnico=eliminarTecnico; window.modalRecordar=modalRecordar; window.enviarWhatsApp=enviarWhatsApp; window.modalActaD1=modalActaD1; window.limpiarFirmaD1=limpiarFirmaD1; window.previewFoto=previewFoto; window.borrarFoto=borrarFoto; window.onTipoChange=onTipoChange; window.abrirLogin=abrirLogin; window.mlPin=mlPin; window.mlDel=mlDel; window.mlLogin=mlLogin; window.cerrarSesion=cerrarSesion; window.generarInformePDF=generarInformePDF; window.modalQR=modalQR; window.descargarHistorialCliente=descargarHistorialCliente; window.obtenerGPS=obtenerGPS; window.modalInformeJMC=modalInformeJMC; window.modalInformeRO=modalInformeRO; window.exportarActaD1=exportarActaD1;
 (async()=>{ await conectarDriveAuto(); await cargarDatos(); if(!manejarRutaQR()) renderView(); })();
