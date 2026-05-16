@@ -229,7 +229,7 @@ function renderPanel() {
     const col = (titulo, color, rows) => `<div style="background:white;border-radius:10px;padding:10px;box-shadow:0 1px 6px rgba(0,0,0,0.08);"><div style="font-weight:700;font-size:0.72rem;color:#555;border-bottom:2px solid ${color};padding-bottom:4px;margin-bottom:6px;">${titulo}</div>${rows}</div>`;
     const eqsFuera = equipos.filter(e=>e.estado==='Fuera de servicio');
     return `<div class="page">
-<div style="background:#e4002b;color:white;padding:10px 14px;border-radius:10px;margin-bottom:12px;display:flex;align-items:center;gap:10px;">
+<div style="background:#0032a0;color:white;padding:10px 14px;border-radius:10px;margin-bottom:12px;display:flex;align-items:center;gap:10px;">
   <img src="https://raw.githubusercontent.com/capacitADA/KRYOTEC/main/KRYOTEC_Logo.png" style="height:32px;filter:brightness(0) invert(1);" onerror="this.style.display='none'">
   <div><div style="font-weight:700;font-size:0.95rem;">Panel Principal</div><div style="font-size:0.72rem;opacity:0.85;">Refrigeración Industrial</div></div>
 </div>
