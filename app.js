@@ -229,7 +229,7 @@ function renderPanel() {
     const col = (titulo, color, rows) => `<div style="background:white;border-radius:10px;padding:10px;box-shadow:0 1px 6px rgba(0,0,0,0.08);"><div style="font-weight:700;font-size:0.72rem;color:#555;border-bottom:2px solid ${color};padding-bottom:4px;margin-bottom:6px;">${titulo}</div>${rows}</div>`;
     const eqsFuera = equipos.filter(e=>e.estado==='Fuera de servicio');
     return `<div class="page">
-<div style="background:#0032a0;color:white;padding:10px 14px;border-radius:10px;margin-bottom:12px;display:flex;align-items:center;gap:10px;">
+<div style="background:#e4002b;color:white;padding:10px 14px;border-radius:10px;margin-bottom:12px;display:flex;align-items:center;gap:10px;">
   <img src="https://raw.githubusercontent.com/capacitADA/KRYOTEC/main/KRYOTEC_Logo.png" style="height:32px;filter:brightness(0) invert(1);" onerror="this.style.display='none'">
   <div><div style="font-weight:700;font-size:0.95rem;">Panel Principal</div><div style="font-size:0.72rem;opacity:0.85;">Refrigeración Industrial</div></div>
 </div>
@@ -1027,6 +1027,24 @@ function generarInformePDF(eid) {
     if(v) setTimeout(()=>v.print(),600);
 }
 
+
+
+// ── HASH ROUTER: #/equipo/:id ──────────────────────────────────────────────
+async function handleHash() {
+    const hash = window.location.hash;
+    const match = hash.match(/^#\/equipo\/(.+)$/);
+    if (!match) return;
+    const eid = match[1];
+    // Si los datos no están cargados todavía, esperar
+    if (!equipos.length) await cargarDatos();
+    const e = getEq(eid);
+    if (!e) { toast('⚠️ Equipo no encontrado: ' + eid); return; }
+    // Navegar al historial del equipo
+    goTo('historial', e.clienteId, eid);
+}
+window.addEventListener('hashchange', handleHash);
+// Ejecutar al cargar si hay hash
+window.addEventListener('load', () => { if (window.location.hash.startsWith('#/equipo/')) handleHash(); });
 
 window.goTo=goTo; window.closeModal=closeModal; window.filtrarClientes=filtrarClientes; window.filtrarEquipos=filtrarEquipos; window.aplicarFiltros=aplicarFiltros; window.limpiarFiltros=limpiarFiltros; window.modalNuevoCliente=modalNuevoCliente; window.modalEditarCliente=modalEditarCliente; window.modalEliminarCliente=modalEliminarCliente; window.guardarCliente=guardarCliente; window.actualizarCliente=actualizarCliente; window.modalNuevoEquipo=modalNuevoEquipo; window.modalEditarEquipo=modalEditarEquipo; window.modalEliminarEquipo=modalEliminarEquipo; window.guardarEquipo=guardarEquipo; window.actualizarEquipo=actualizarEquipo; window.modalNuevoServicio=modalNuevoServicio; window.modalEditarServicio=modalEditarServicio; window.guardarServicio=guardarServicio; window.actualizarServicio=actualizarServicio; window.eliminarServicio=eliminarServicio; window.modalNuevoTecnico=modalNuevoTecnico; window.modalEditarTecnico=modalEditarTecnico; window.guardarTecnico=guardarTecnico; window.actualizarTecnico=actualizarTecnico; window.eliminarTecnico=eliminarTecnico; window.modalRecordar=modalRecordar; window.enviarWhatsApp=enviarWhatsApp; window.modalActaD1=modalActaD1; window.limpiarFirmaD1=limpiarFirmaD1; window.previewFoto=previewFoto; window.borrarFoto=borrarFoto; window.onTipoChange=onTipoChange; window.abrirLogin=abrirLogin; window.mlPin=mlPin; window.mlDel=mlDel; window.mlLogin=mlLogin; window.cerrarSesion=cerrarSesion; window.generarInformePDF=generarInformePDF; window.modalQR=modalQR; window.descargarHistorialCliente=descargarHistorialCliente; window.obtenerGPS=obtenerGPS; window.modalInformeJMC=modalInformeJMC; window.modalInformeRO=modalInformeRO; window.exportarActaD1=exportarActaD1;
 (async()=>{ await conectarDriveAuto(); await cargarDatos(); if(!manejarRutaQR()) renderView(); })();
