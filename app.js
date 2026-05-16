@@ -199,7 +199,7 @@ function goTo(view, cid = null, eid = null) {
 }
 
 function renderView() {
-    if (!sesionActual && currentView !== 'panel' && currentView !== 'tecnicos') currentView = 'panel';
+    if (!sesionActual && currentView !== 'panel' && currentView !== 'tecnicos' && currentView !== 'historial') currentView = 'panel';
     const main = document.getElementById('mainContent');
     document.getElementById('botnavEl').style.display = 'flex';
     switch (currentView) {
